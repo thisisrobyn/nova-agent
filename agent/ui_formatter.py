@@ -1,8 +1,15 @@
-import sys
-import os
+"""CLI output formatter with ANSI colour support.
+
+Provides ``CLIFormatter`` — a collection of static methods for printing
+coloured headers, messages, token stats and session summaries to the
+terminal.  Automatically detects colour support across platforms.
+"""
+
 import io
-from typing import Optional, Dict, Any
+import os
+import sys
 from datetime import datetime
+from typing import Any, Dict, Optional
 
 # Detect if we're in PowerShell and disable colors
 _IS_POWERSHELL = "PSModulePath" in os.environ

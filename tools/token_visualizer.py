@@ -1,6 +1,13 @@
+"""Token usage tracking, reporting and visualisation.
+
+Includes ``TokenUsageTracker`` for accumulating per-request stats,
+``TokenReport`` for summary generation with cost estimation, and
+helpers for text-based progress bars and badges.
+"""
+
 import logging
-from typing import Dict, List, Optional
 from dataclasses import dataclass
+from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 

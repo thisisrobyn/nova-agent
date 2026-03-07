@@ -1,5 +1,11 @@
+"""Token counting utilities using tiktoken.
+
+Provides helpers to count tokens in text, extract usage metadata from
+LLM responses, and format token statistics for display.
+"""
+
 import logging
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 

@@ -1,41 +1,40 @@
-from langchain_openai import ChatOpenAI
-from dotenv import load_dotenv
-import os
+"""LLM client initialisation for NOVA.
+
+Exposes a module-level ``llm`` singleton and a helper
+``get_llm()`` that returns the instance (useful for lazy access).
+"""
+
 import logging
+import os
+
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
 
 logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-api_key = os.getenv("OPENAI_API_KEY")
+MODEL_NAME: str = os.getenv("NOVA_MODEL_NAME", "gpt-4.1-mini")
+TEMPERATURE: float = float(os.getenv("NOVA_TEMPERATURE", "0.7"))
 
-try:
-    from langchain.chat_models import ChatOpenAI
-except Exception:
+_api_key = os.getenv("OPENAI_API_KEY")
+
+llm: ChatOpenAI | None = None
+
+if _api_key:
     try:
-        from langchain_openai import ChatOpenAI
-    except Exception:
-        ChatOpenAI = None
-
-MODEL_NAME = "gpt-4.1-mini"
-TEMPERATURE = float("0.7")
-
-llm = None
-if ChatOpenAI is not None:
-    try:
-        if api_key:
-            logger.info(f"Initializing ChatOpenAI with model: {MODEL_NAME}")
-            llm = ChatOpenAI(
-                model_name=MODEL_NAME,
-                temperature=TEMPERATURE,
-                api_key=api_key,
-            )
-            logger.info("ChatOpenAI initialized successfully with API key")
-        else:
-            logger.warning("OPENAI_API_KEY not found in environment variables. Using fallback.")
-            llm = None
+        llm = ChatOpenAI(
+            model=MODEL_NAME,
+            temperature=TEMPERATURE,
+            api_key=_api_key,
+        )
+        logger.info("ChatOpenAI initialised – model=%s", MODEL_NAME)
     except Exception as e:
-        logger.error(f"Failed to initialize ChatOpenAI: {e}")
-        llm = None
+        logger.error("Failed to initialise ChatOpenAI: %s", e)
 else:
-    logger.error("ChatOpenAI class not available")
+    logger.warning("OPENAI_API_KEY not set – LLM unavailable")
+
+
+def get_llm() -> ChatOpenAI | None:
+    """Return the configured LLM instance (may be ``None``)."""
+    return llm

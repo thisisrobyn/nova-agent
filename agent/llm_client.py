@@ -1,6 +1,13 @@
+"""Low-level LLM generation helper.
+
+Wraps the configured ChatOpenAI instance with multiple call-pattern
+fallbacks and automatic token usage extraction / estimation.
+"""
+
 import asyncio
-from typing import Optional, Any, Dict, Tuple # Added Any here
 import logging
+from typing import Any, Dict, Optional, Tuple
+
 from tools.token_counter import count_tokens_for_message
 
 logger = logging.getLogger(__name__)

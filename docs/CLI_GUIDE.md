@@ -3,7 +3,7 @@
 ## Overview
 
 The NOVA CLI has been upgraded with:
-- ✨ Beautiful, colorized output (Copilot/Claude-style)
+- ✨ Beautiful, colorized output
 - 📊 Real-time token tracking for each message
 - 📈 Cumulative token count for your session
 - 🎨 Clean separators and visual hierarchy
@@ -14,10 +14,10 @@ The NOVA CLI has been upgraded with:
 ### 1. **Token Tracking**
 
 Every interaction shows:
-- **Prompt tokens**: Tokens used for your input
-- **Completion tokens**: Tokens used for the response
-- **Total tokens**: Combined count for that turn
-- **Session total**: Cumulative tokens since session start
+- **Prompt tokens**: tokens used for your input
+- **Completion tokens**: tokens used for the response
+- **Total tokens**: combined count for that turn
+- **Session total**: cumulative tokens since session start
 
 Example output:
 ```
@@ -31,16 +31,16 @@ Example output:
 ────────────────────────────────────────────────────────────
 ```
 
-### 2. **Color Scheme**
+### 2. **Color scheme**
 
-- **Bright Blue (▶ YOU)**: Your messages
-- **Bright Green (◀ NOVA)**: Agent responses
-- **Bright Yellow (📊)**: Token information
-- **Bright Cyan**: Headers and separators
-- **Bright Red**: Errors
-- **Bright Green (✓)**: Success messages
+- **Bright Blue (▶ YOU)**: your messages
+- **Bright Green (◀ NOVA)**: agent responses
+- **Bright Yellow (📊)**: token information
+- **Bright Cyan**: headers and separators
+- **Bright Red**: errors
+- **Bright Green (✓)**: success messages
 
-### 3. **Visual Elements**
+### 3. **Visual elements**
 
 ```
 ╔════════════════════════════════════════════════════════════╗  ← Header box
@@ -66,7 +66,7 @@ Example output:
 
 ## Usage
 
-### Start the Interactive CLI
+### Start the interactive CLI
 
 ```bash
 python -m agent.cli
@@ -83,7 +83,7 @@ You'll see:
 - **exit** or **quit** - End the session (shows session stats)
 - **Ctrl+C** - Interrupt (graceful shutdown)
 
-### Example Session
+### Example session
 
 ```
 ╔════════════════════════════════════════════════════════════╗
@@ -120,19 +120,15 @@ Total Tokens................... 68
 ────────────────────────────────────────────────────────────
 ```
 
-## Files Structure
+## Files structure
 
-### New Files
 - **`agent/ui_formatter.py`** - Main UI formatting module with CLIFormatter class
-- **`test_cli_tokens.py`** - Test script demonstrating token tracking
-
-### Modified Files
 - **`agent/cli.py`** - Integrated new formatter and token display
 - **`agent/nodes.py`** - Added token tracking to reasoning node
 - **`agent/graph.py`** - Updated state initialization with token fields
 - **`agent/state.py`** - Added `total_tokens` and `token_usage` fields
 
-## Implementation Details
+## Implementation details
 
 ### State Tracking
 
@@ -142,7 +138,7 @@ total_tokens: int  # Cumulative tokens in session
 token_usage: Optional[Dict]  # Last response token data
 ```
 
-### Token Information Format
+### Token information format
 
 Token data from API responses:
 ```python
@@ -153,7 +149,7 @@ token_usage = {
 }
 ```
 
-### Color Support
+### Color support
 
 - **Auto-detection**: Colors enabled on Unix-like terminals
 - **Windows**: Attempts to enable ANSI support (requires Windows 10+)
@@ -161,7 +157,7 @@ token_usage = {
 
 ## Customization
 
-### Disable Colors
+### Disable colors
 
 If colors aren't working on your system, you can manually disable them:
 
@@ -170,7 +166,7 @@ from agent.ui_formatter import CLIFormatter
 CLIFormatter.SUPPORTS_COLOR = False
 ```
 
-### Custom Messages
+### Custom messages
 
 The CLIFormatter also provides methods for custom output:
 
@@ -186,7 +182,7 @@ CLIFormatter.print_info("Information")
 CLIFormatter.print_thinking("Loading...")
 ```
 
-## Cost Estimation
+## Cost estimation
 
 You can calculate API costs based on token usage:
 
@@ -202,7 +198,7 @@ For 100 tokens used (50 prompt + 50 completion):
 
 ## Troubleshooting
 
-### No Token Display
+### No token display
 
 If token counts don't show, this usually means:
 1. Using the LLM fallback (mock) instead of real API
@@ -211,7 +207,7 @@ If token counts don't show, this usually means:
 
 **Solution**: Set up your `OPENAI_API_KEY` in `.env`
 
-### Colors Not Working
+### Colors not working
 
 Windows users might need:
 1. Windows 10 or later
@@ -220,7 +216,7 @@ Windows users might need:
 
 **Fallback**: Plain text output still works fine
 
-### Character Encoding Issues
+### Character encoding issues
 
 If you see strange characters instead of emoji/symbols:
 1. Check terminal encoding (should be UTF-8)
@@ -229,7 +225,7 @@ If you see strange characters instead of emoji/symbols:
 
 ##Advanced Usage
 
-### Testing Token Tracking
+### Testing token tracking
 
 Run the included test script:
 
@@ -242,7 +238,7 @@ This demonstrates:
 - Token accumulation
 - Session statistics
 
-### Integrating with External Tools
+### Integrating with external tools
 
 Use the CLIFormatter in other Python scripts:
 
@@ -259,11 +255,11 @@ CLIFormatter.print_interaction_summary(
 )
 ```
 
-## API Reference
+## API reference
 
 See [TOKEN_TRACKING.md](TOKEN_TRACKING.md) for complete token tracking API.
 
-### CLIFormatter Methods
+### CLIFormatter methods
 
 ```python
 # Output formatting
@@ -287,10 +283,3 @@ CLIFormatter.get_user_input()                  # Styled input prompt
 CLIFormatter.print_usage_stats(dict)           # Statistics table
 CLIFormatter.print_interaction_summary(...)    # Complete interaction
 ```
-
-## Next Steps
-
-1. **Configure API Key**: Set `OPENAI_API_KEY` in `.env` to see real token counts
-2. **Explore Token Patterns**: Notice which questions use more tokens
-3. **Monitor Costs**: Track session tokens to understand API spending
-4. **Customize UI**: Modify colors/symbols in `agent/ui_formatter.py`
