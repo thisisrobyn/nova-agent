@@ -1,6 +1,14 @@
-# 🤖 NOVA — Neural Orchestration & Virtual Agent
+<div align="center">
+
+# NOVA — Neural Orchestration & Virtual Agent
 
 An advanced conversational AI agent built with **LangGraph**, **LangChain** and **OpenAI**.
+
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Follow-0A66C2?style=for-the-badge&logo=linkedin)](https://www.linkedin.com/in/thisisrober)
+[![GitHub](https://img.shields.io/badge/GitHub-Follow-181717?style=for-the-badge&logo=github)](https://github.com/thisisrober)
+[![Stars](https://img.shields.io/github/stars/thisisrober/nova-agent?style=for-the-badge&color=f59e0b)](https://github.com/thisisrober/nova-agent/stargazers)
+
+</div>
 
 ## Features
 
@@ -11,11 +19,11 @@ An advanced conversational AI agent built with **LangGraph**, **LangChain** and 
 - **CLI** — rich terminal interface with colored output and session stats
 - **Token tracking** — per-message and cumulative token usage with cost estimation
 
-## Quick Start
+## Quick start
 
 ```bash
 # 1. Clone and enter the project
-git clone <repo-url> && cd nova-agent
+git clone https://github.com/thisisrober/nova-agent/ && cd nova-agent
 
 # 2. Create .env from the template
 cp .env.example .env
@@ -30,11 +38,11 @@ source ~/.bashrc
 nova
 ```
 
-## How to Use
+## How to use
 
 ### Environment setup
 
-Copy the template and fill in your API key:
+Copy the template and fill in your OpenAI API key:
 
 ```bash
 cp .env.example .env
@@ -170,3 +178,9 @@ User → [HumanMessage] → Agent Node (LLM + bound tools)
 ## License
 
 MIT
+
+---
+
+<div align="center">
+  Made with ❤️ by <a href="https://thisisrober.es">thisisrober</a>
+</div>
