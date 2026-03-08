@@ -1,82 +1,88 @@
-# NOVA Architecture
+# Architecture
 
 ## Overview
 
-NOVA (Neural Orchestration & Virtual Agent) is a conversational AI agent built on **LangGraph** and **LangChain**. Its design follows the **ReAct** (Reasoning + Acting) pattern: the agent reasons about the user's question, decides whether it needs to execute tools, executes them, and formulates a final response.
+NOVA follows a **ReAct** (Reasoning + Acting) pattern powered by **LangGraph**. The system has three layers:
 
-## Component Diagram
+1. **Frontend** — React web app (or CLI) where the user types messages
+2. **Backend** — FastAPI server that manages sessions and streams responses
+3. **Agent** — LangGraph state machine that reasons and calls tools
+
+## How a message flows through the system
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                      Interfaces                          │
-│  ┌──────────┐  ┌──────────────┐  ┌────────────────────┐ │
-│  │   CLI    │  │  Streamlit   │  │  MCP Server        │ │
-│  │ agent/   │  │  ui/app.py   │  │  nova_mcp/server.py│ │
-│  │ cli.py   │  │              │  │                    │ │
-│  └────┬─────┘  └──────┬───────┘  └────────┬───────────┘ │
-│       │               │                   │              │
-│       └───────────────┼───────────────────┘              │
-│                       ▼                                  │
-│  ┌────────────────────────────────────────────────────┐  │
-│  │              LangGraph StateGraph                  │  │
-│  │                                                    │  │
-│  │   START → [agent_node] ──→ tool_calls? ──→ END    │  │
-│  │                │                                   │  │
-│  │                ▼ yes                               │  │
-│  │           [tool_node] ──→ [agent_node]             │  │
-│  │                                                    │  │
-│  │   agent/graph.py · agent/nodes.py · agent/state.py │  │
-│  └──────────┬────────────────────┬────────────────────┘  │
-│             │                    │                        │
-│             ▼                    ▼                        │
-│  ┌──────────────────┐  ┌─────────────────────────────┐   │
-│  │   LLM (OpenAI)   │  │          Tools              │   │
-│  │   agent/llm.py   │  │  tools/calculator.py        │   │
-│  │   ChatOpenAI      │  │  tools/datetime_tool.py     │   │
-│  │   gpt-4.1-mini   │  │  tools/files.py             │   │
-│  └──────────────────┘  └─────────────────────────────┘   │
-└──────────────────────────────────────────────────────────┘
+Browser (React)                    Server (FastAPI)                  Agent (LangGraph)
+─────────────────                  ────────────────                  ─────────────────
+User types message
+        │
+        ▼
+  POST /chat/stream ──────────►  SSE streaming endpoint
+                                        │
+                                        ▼
+                                 Create input state ──────────►  agent_node
+                                                                    │
+                                                              LLM decides:
+                                                              needs tool?
+                                                              /         \
+                                                            Yes          No
+                                                             │            │
+                                                        tools node     respond
+                                                        (execute)        │
+                                                             │            │
+                                                        back to       ◄──┘
+                                                        agent_node
+                                                                    │
+                                 ◄─── SSE tokens ──────────────────┘
+        │
+  Render tokens
+  word by word
 ```
 
-## Request Flow
+## Agent state
 
-1. The user sends a message (via CLI, Streamlit, or MCP).
-2. The message is converted into a LangChain `HumanMessage` and added to the state.
-3. LangGraph invokes the **agent_node**:
-   - Builds the prompt: system message (with cwd) + full conversation history.
-   - Calls the LLM with the bound tools (`bind_tools()`).
-   - The LLM responds with text or with `tool_calls`.
-4. The **router** (`should_use_tools`) inspects the response:
-   - If there are `tool_calls` → executes the **tool_node** → returns to step 3.
-   - If there are no `tool_calls` → end of the graph.
-5. The final response is extracted from the last `AIMessage` and presented to the user.
+The agent keeps a state dictionary (`NOVAState`) that travels through every node:
 
-## Agent State (`NOVAState`)
+| Field | Type | Purpose |
+|-------|------|---------|
+| `messages` | `list[BaseMessage]` | Full conversation history (human, AI, tool) |
+| `memory_context` | `str` | Additional context from memory (future) |
+| `tool_results` | `list[str]` | Raw tool outputs |
+| `iteration_count` | `int` | How many times the agent has run |
+| `total_tokens` | `int` | Cumulative token usage |
+| `token_usage` | `dict` | Last turn's prompt/completion/total tokens |
 
-The state is a typed dictionary that LangGraph manages automatically:
+## Graph nodes
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `messages` | `Annotated[Sequence[BaseMessage], add_messages]` | Full conversation history. Uses the `add_messages` reducer for automatic merging. |
-| `memory_context` | `str` | Long-term memory context (Phase 2). |
-| `tool_results` | `List[Dict]` | Intermediate tool results. |
-| `iteration_count` | `int` | Number of agent iterations in the session. |
-| `total_tokens` | `int` | Accumulated tokens in the session. |
-| `token_usage` | `Optional[Dict]` | Token usage from the last LLM call. |
+### `agent_node` (in `agent/nodes.py`)
 
-## Main Modules
+1. Gets the LLM singleton from `agent/llm.py`
+2. Calls `get_tools()` which returns local tools + MCP tools
+3. Binds tools to the LLM (`llm.bind_tools(tools)`)
+4. Sends the full message history to the LLM
+5. Returns the AI response + token usage
 
-### `agent/graph.py`
-Builds and compiles the LangGraph `StateGraph`. Defines the tool registry (`get_tools()`), nodes and edges, and exposes `compiled_graph` as a singleton. Provides `run_agent_once()` as the entry point for CLI and UI.
+### `should_use_tools` (router)
 
-### `agent/nodes.py`
-Contains `agent_node` (calls the LLM with tools) and `should_use_tools` (conditional router). The system prompt is dynamically injected with the current working directory.
+Looks at the last message. If it has `tool_calls` → go to `tools` node. Otherwise → end.
 
-### `agent/state.py`
-Defines `NOVAState` with LangGraph annotations. The `messages` field uses `add_messages` so that each node can return only its new messages.
+### `tools` node (LangGraph `ToolNode`)
 
-### `agent/llm.py`
-Initializes the `ChatOpenAI` singleton. Model and temperature are configurable via environment variables (`NOVA_MODEL_NAME`, `NOVA_TEMPERATURE`).
+Executes whatever tool the LLM requested and returns the result as a `ToolMessage`. Control goes back to `agent_node` so the LLM can use the result.
 
-### `agent/llm_client.py`
-Low-level helper for LLM generation with multiple fallback patterns. Used internally; the main graph uses `bind_tools()` directly.
+## Graph rebuild on MCP tool changes
+
+The graph is compiled lazily. When `set_mcp_tools()` is called (at API startup), the graph recompiles with the new tools so the `ToolNode` can execute them. A `_GraphProxy` object ensures existing references always point to the latest compiled graph.
+
+## Key modules
+
+| Module | Responsibility |
+|--------|---------------|
+| `agent/graph.py` | Build LangGraph, manage tool registry, lazy graph compilation |
+| `agent/nodes.py` | LLM reasoning + tool routing |
+| `agent/state.py` | `NOVAState` TypedDict with `add_messages` reducer |
+| `agent/llm.py` | OpenAI model singleton + runtime reconfiguration |
+| `api/main.py` | FastAPI app, CORS, MCP lifecycle |
+| `api/routes.py` | REST endpoints: chat, stream (SSE), settings, history |
+| `api/schemas.py` | Pydantic request/response models |
+| `nova_mcp/client.py` | Load tools from external MCP servers |
+| `nova_mcp/server.py` | Expose NOVA's tools via MCP |

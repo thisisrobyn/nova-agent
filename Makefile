@@ -1,4 +1,4 @@
-.PHONY: install setup run ui mcp clean help
+.PHONY: install setup run ui api dev mcp clean help
 
 VENV      := .venv
 PYTHON    := $(VENV)/bin/python
@@ -12,6 +12,7 @@ help: ## Show available commands
 install: ## Install dependencies and build the nova command
 	uv sync
 	uv pip install -e .
+	cd ui && npm install
 	@echo ""
 	@echo "✅ Dependencies installed. Run 'make setup' to add the 'nova' command to your shell."
 
@@ -30,8 +31,15 @@ setup: install ## Add 'nova' alias to .bashrc
 run: ## Run the NOVA agent CLI
 	@$(NOVA_BIN)
 
-ui: ## Run the Streamlit web UI
-	@$(PYTHON) -m streamlit run ui/app.py
+api: ## Run the FastAPI backend (port 8000)
+	@$(PYTHON) -m uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+
+ui: ## Run the React dev server (port 5173)
+	@cd ui && npm run dev
+
+dev: ## Run both API and UI in parallel
+	@echo "🚀 Starting NOVA development servers..."
+	@$(MAKE) api & $(MAKE) ui & wait
 
 mcp: ## Run the MCP server (stdio)
 	@$(PYTHON) -m nova_mcp.server
@@ -45,3 +53,4 @@ test: ## Run tests
 clean: ## Remove build artifacts and cache
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	rm -rf .pytest_cache build dist *.egg-info
+	rm -rf ui/dist ui/node_modules/.vite

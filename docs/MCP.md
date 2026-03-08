@@ -1,96 +1,86 @@
-# MCP Integration in NOVA
+# MCP — Model Context Protocol
 
 ## What is MCP?
 
-The **Model Context Protocol** (MCP) is an open standard proposed by Anthropic that defines how AI applications expose and consume tools, resources, and prompts in an interoperable way. It works with a client-server model:
+MCP is an open standard (created by Anthropic) that lets AI tools talk to each other. Think of it like USB for AI tools — one standard plug that works everywhere.
 
-- **MCP Server**: exposes tools that any compatible client can discover and execute.
-- **MCP Client**: connects to MCP servers, discovers their tools, and integrates them into its flow.
+NOVA uses MCP in two ways:
 
-NOVA implements both roles.
+1. **As a server** — NOVA exposes its tools (calculator, file reader, etc.) so _other_ apps can use them
+2. **As a client** — NOVA connects to _external_ MCP servers to get _more_ tools (like searching LangChain docs)
 
-## NOVA as an MCP Server
+## NOVA as MCP Client (connecting to external tools)
 
-**Module**: `nova_mcp/server.py`
+### How it works
 
-NOVA's MCP server exposes the same tools that the agent uses internally (calculator, datetime, files), allowing external applications to use them.
+When the API server starts, it:
 
-**Implementation**: uses **FastMCP**, a framework that simplifies the creation of MCP servers. Each tool is registered with the `@mcp.tool()` decorator and delegates execution to the corresponding LangChain tool.
+1. Reads `mcp_servers.json` from the project root
+2. Connects to each server listed there
+3. Downloads the available tools
+4. Adds them to the agent's tool belt (alongside calculator, file reader, etc.)
 
-### Running the Server
+### Configuration
 
-```bash
-# stdio transport (default) — for integration with IDEs and other agents
-python -m nova_mcp.server
+Edit `mcp_servers.json`:
 
-# HTTP/SSE transport — for remote access
-MCP_TRANSPORT=http python -m nova_mcp.server
+```json
+{
+  "langchain-docs": {
+    "url": "https://docs.langchain.com/mcp",
+    "transport": "streamable_http"
+  }
+}
 ```
 
-### Exposed Tools
+Each entry has:
+- **key** — a name you choose (e.g. `"langchain-docs"`)
+- **url** — the MCP server URL
+- **transport** — how to connect: `"streamable_http"` for web servers, `"stdio"` for local commands
+
+### Local command-based servers
+
+You can also connect to MCP servers that run as local commands:
+
+```json
+{
+  "filesystem": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user"],
+    "transport": "stdio"
+  }
+}
+```
+
+### Code
+
+- `nova_mcp/client.py` — `load_mcp_tools()` reads the config and returns LangChain tools
+- `api/main.py` — calls `load_mcp_tools()` at startup and registers them in the agent graph
+
+## NOVA as MCP Server (exposing tools to others)
+
+### What it exposes
 
 | Tool | Description |
 |------|-------------|
-| `calculator` | Safe math evaluator |
-| `get_current_datetime` | Current date/time |
-| `convert_timezone` | Timezone conversion |
-| `read_csv` | CSV file reading |
-| `read_excel` | Excel file reading |
-| `read_text_file` | Text file reading |
+| `calculator` | Evaluate math expressions |
+| `get_current_datetime` | Get current date/time in any timezone |
+| `convert_timezone` | Convert time between timezones |
+| `read_csv` | Read CSV files |
+| `read_excel` | Read Excel files |
+| `read_text_file` | Read text/code files |
 
-## NOVA as an MCP Client
+### Running the server
 
-**Module**: `nova_mcp/client.py`
+```bash
+# For local integrations (IDE plugins, etc.)
+make mcp
 
-The MCP client allows NOVA to connect to external MCP servers and load their tools as LangChain `BaseTool` objects, which can then be integrated into the agent's graph.
-
-**Implementation**: uses `MultiServerMCPClient` from `langchain-mcp-adapters`, which handles the connection, tool discovery, and automatic conversion to LangChain.
-
-### Usage
-
-```python
-from nova_mcp.client import load_mcp_tools
-
-# External MCP server configuration
-servers = {
-    "my-server": {
-        "command": "python",
-        "args": ["-m", "my_mcp_server"],
-    }
-}
-
-tools = await load_mcp_tools(servers)
-# tools is a list of LangChain BaseTool objects
+# For remote access (other machines, web apps)
+make mcp-http
 ```
 
-### Supported Transports
+### Code
 
-| Transport | Environment Variable | Usage |
-|-----------|---------------------|-------|
-| **stdio** | `MCP_TRANSPORT=stdio` | Communication via stdin/stdout. Ideal for local integration with IDEs and processes. |
-| **HTTP/SSE** | `MCP_TRANSPORT=http` | Server-Sent Events over HTTP. For remote or cross-machine access. |
-
-## MCP Architecture in NOVA
-
-```
-┌─────────────────────────────────────────────────┐
-│                  NOVA Agent                     │
-│                                                 │
-│  Local tools             External tools         │
-│  (tools/@tool)           (MCP client)           │
-│       │                       │                 │
-│       └───────────┬───────────┘                 │
-│                   ▼                             │
-│            get_tools() + MCP tools              │
-│                   │                             │
-│                   ▼                             │
-│            LangGraph StateGraph                 │
-│            (agent ↔ tools loop)                 │
-└─────────────────────────────────────────────────┘
-                    │
-                    ▼ (MCP server)
-        ┌───────────────────────┐
-        │  External applications│
-        │  (IDEs, other agents) │
-        └───────────────────────┘
-```
+- `nova_mcp/server.py` — uses FastMCP to expose tools
+- Transport controlled by `MCP_TRANSPORT` env var (`stdio` or `http`)

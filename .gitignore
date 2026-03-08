@@ -4,4 +4,20 @@ __pypackages__/
 .env
 *.pyc
 __pycache__/
-tests/*
+
+# UI build artifacts
+ui/node_modules/
+ui/dist/
+ui/dist-ssr/
+
+# Data & storage
+data/
+
+# IDE
+.vscode/
+.idea/
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db

@@ -8,10 +8,11 @@ Builds and compiles a ``StateGraph`` with an **agent → tools** loop:
 
 Public API
 ----------
-- ``compiled_graph``   – the compiled LangGraph runnable.
-- ``get_tools()``      – returns the list of LangChain tools available to the agent.
-- ``run_agent_once()`` – convenience async helper for the CLI.
-- ``run_agent_sync()`` – sync wrapper around ``run_agent_once``.
+- ``get_compiled_graph()`` – returns the (lazily-built) compiled LangGraph runnable.
+- ``get_tools()``          – returns the list of LangChain tools available to the agent.
+- ``set_mcp_tools()``      – register external MCP tools at runtime and rebuild the graph.
+- ``run_agent_once()``     – convenience async helper for the CLI.
+- ``run_agent_sync()``     – sync wrapper around ``run_agent_once``.
 """
 
 import asyncio
@@ -30,13 +31,25 @@ logger = logging.getLogger(__name__)
 
 # ── Tool registry ────────────────────────────────────────────────────
 
+_mcp_tools: List[BaseTool] = []
+_compiled_graph = None
+
+
+def set_mcp_tools(tools: List[BaseTool]) -> None:
+    """Register MCP tools and rebuild the graph so ToolNode can execute them."""
+    global _mcp_tools, _compiled_graph
+    _mcp_tools = list(tools)
+    _compiled_graph = _build_and_compile()
+    logger.info("Registered %d MCP tool(s) — graph rebuilt", len(_mcp_tools))
+
+
 def get_tools() -> List[BaseTool]:
-    """Return all tools available to the NOVA agent."""
+    """Return all tools available to the NOVA agent (local + MCP)."""
     from tools.calculator import calculator
     from tools.datetime_tool import convert_timezone, get_current_datetime
     from tools.files import list_directory, read_csv, read_excel, read_text_file
 
-    return [
+    local: List[BaseTool] = [
         get_current_datetime,
         convert_timezone,
         calculator,
@@ -45,12 +58,13 @@ def get_tools() -> List[BaseTool]:
         read_excel,
         read_text_file,
     ]
+    return local + _mcp_tools
 
 
 # ── Graph construction ───────────────────────────────────────────────
 
-def build_graph() -> StateGraph:
-    """Construct (but do not compile) the NOVA agent graph."""
+def _build_and_compile():
+    """Build and compile the NOVA agent graph."""
     tools = get_tools()
     tool_node = ToolNode(tools)
 
@@ -62,11 +76,31 @@ def build_graph() -> StateGraph:
     graph.add_conditional_edges("agent", should_use_tools, {"tools": "tools", "__end__": END})
     graph.add_edge("tools", "agent")
 
-    return graph
+    compiled = graph.compile()
+    logger.info("NOVA graph compiled with %d tool(s)", len(tools))
+    return compiled
 
 
-compiled_graph = build_graph().compile()
-logger.info("NOVA graph compiled successfully")
+def get_compiled_graph():
+    """Return the compiled graph, building it on first call."""
+    global _compiled_graph
+    if _compiled_graph is None:
+        _compiled_graph = _build_and_compile()
+    return _compiled_graph
+
+
+# Keep backward-compat attribute (used by routes.py streaming)
+compiled_graph = None  # lazy sentinel
+
+
+class _GraphProxy:
+    """Proxy that always delegates to the latest compiled graph."""
+
+    def __getattr__(self, name):
+        return getattr(get_compiled_graph(), name)
+
+
+compiled_graph = _GraphProxy()
 
 
 # ── Convenience helpers (used by CLI) ────────────────────────────────
@@ -94,13 +128,12 @@ async def run_agent_once(
             "token_usage": None,
         }
 
-    # Append user message and invoke the graph
     input_state = dict(state)
     input_state["messages"] = list(state.get("messages", [])) + [
         HumanMessage(content=user_input)
     ]
 
-    result = await compiled_graph.ainvoke(input_state)
+    result = await get_compiled_graph().ainvoke(input_state)
     return result
 
 

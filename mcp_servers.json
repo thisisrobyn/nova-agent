@@ -1,0 +1,6 @@
+{
+  "langchain-docs": {
+    "url": "https://docs.langchain.com/mcp",
+    "transport": "streamable_http"
+  }
+}

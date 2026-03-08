@@ -1,115 +1,60 @@
-# NOVA Technology Stack
+# Tech Stack
 
-## Language and Environment
+## Backend (Python)
 
-| Component | Technology | Version | Purpose |
-|-----------|-----------|---------|---------|
-| Language | Python | ≥ 3.10 | Main project language |
-| Package manager | uv | — | Dependency resolution and virtualenvs |
-| Build system | Hatchling | — | Project packaging and `nova` command generation |
+| Package | Version | What it does |
+|---------|---------|-------------|
+| `langchain` | ≥ 1.1.3 | Framework for building LLM apps |
+| `langgraph` | ≥ 1.0.4 | State machine for the agent loop |
+| `langchain-openai` | ≥ 0.3.0 | Connect to OpenAI models |
+| `fastapi` | ≥ 0.115.0 | REST API framework (async) |
+| `uvicorn` | ≥ 0.34.0 | ASGI server to run FastAPI |
+| `langchain-mcp-adapters` | ≥ 0.1.0 | Connect to external MCP tool servers |
+| `fastmcp` | ≥ 3.0.2 | Expose NOVA's tools via MCP |
+| `mcp` | ≥ 1.0 | MCP protocol implementation |
+| `tiktoken` | ≥ 0.9.0 | Count tokens (for cost tracking) |
+| `pandas` | ≥ 2.2.0 | Read CSV files |
+| `openpyxl` | ≥ 3.1.0 | Read Excel files |
+| `python-dotenv` | ≥ 1.1.0 | Load `.env` configuration |
 
-## Orchestration and LLM
+**Python version:** 3.11+
+**Package manager:** [uv](https://github.com/astral-sh/uv)
 
-| Component | Package | Purpose |
-|-----------|---------|---------|
-| **LangGraph** | `langgraph` | Graph engine for the agent. Defines the `agent → tools → agent` flow as a `StateGraph` with conditional edges. |
-| **LangGraph Prebuilt** | `langgraph-prebuilt` | Provides `ToolNode` — a node that automatically executes the tools called by the LLM. |
-| **LangChain** | `langchain` | Base framework: message abstractions (`BaseMessage`, `HumanMessage`, `AIMessage`), `@tool` decorator, and utilities. |
-| **LangChain OpenAI** | `langchain-openai` | Integration with the OpenAI API. Provides `ChatOpenAI` with `bind_tools()` support. |
-| **OpenAI** | `openai` | Official OpenAI Python client (dependency of `langchain-openai`). |
+## Frontend (TypeScript)
 
-### Why LangGraph instead of plain LangChain?
+| Package | What it does |
+|---------|-------------|
+| `react` 19 | UI component library |
+| `vite` 7 | Fast build tool and dev server |
+| `tailwindcss` 4 | Utility-first CSS framework |
+| `framer-motion` | Smooth animations |
+| `react-markdown` | Render markdown in chat messages |
+| `remark-gfm` | GitHub-flavored markdown (tables, strikethrough) |
+| `rehype-highlight` | Syntax highlighting for code blocks |
+| `highlight.js` | VS Code-style code coloring |
+| `lucide-react` | Icon library |
 
-LangChain provides abstractions for LLMs, prompts, and tools, but it does not manage complex flows with cycles. LangGraph adds:
+**Node.js version:** 18+
+**Package manager:** npm
 
-- **Stateful graphs**: each node receives and returns partial state, and LangGraph merges it.
-- **Conditional edges**: the router decides whether to go to the tool node or finish.
-- **Cycles**: the agent can call tools multiple times before responding.
-- **Reducers**: `add_messages` automatically merges message lists.
+## Why these choices?
 
-### How do they connect?
+### LangGraph over plain LangChain
 
-```
-LangChain (messages, @tool, ChatOpenAI)
-    ↓
-LangGraph (StateGraph, ToolNode, edges)
-    ↓
-NOVA (graph.py, nodes.py, state.py)
-```
+LangGraph gives us a proper state machine with cycles. The agent can call a tool, read the result, decide it needs _another_ tool, and keep going. Plain LangChain chains are linear — they can't loop.
 
-LangChain provides the building blocks (LLM, messages, tools). LangGraph orchestrates them in a stateful graph. NOVA defines the agent-specific logic.
+### FastAPI + SSE over WebSockets
 
-## Model Context Protocol (MCP)
+Server-Sent Events (SSE) are simpler than WebSockets and perfect for streaming text. The browser opens one HTTP connection and the server pushes tokens as they arrive. No need for bidirectional communication.
 
-| Component | Package | Purpose |
-|-----------|---------|---------|
-| **FastMCP** | `fastmcp` | Framework for creating MCP servers. NOVA exposes its tools as an MCP server in `nova_mcp/server.py`. |
-| **MCP** | `mcp` | Base implementation of the MCP protocol (FastMCP dependency). |
-| **LangChain MCP Adapters** | `langchain-mcp-adapters` | MCP client that converts tools from external MCP servers into LangChain `BaseTool` objects. Used in `nova_mcp/client.py`. |
+### React over Streamlit
 
-### What is MCP?
+The original UI used Streamlit (Python). We migrated to React for:
+- Real-time streaming (token by token)
+- Better animations and UX (dark mode, toasts, drag & drop)
+- Full control over the layout and interactions
+- Standard web development tooling
 
-The Model Context Protocol (MCP) is an open standard that allows agents and applications to expose and consume tools in an interoperable way. NOVA implements both sides:
+### MCP for tool integration
 
-- **MCP Server** (`nova_mcp/server.py`): allows external applications (other agents, IDEs) to use NOVA's tools.
-- **MCP Client** (`nova_mcp/client.py`): allows NOVA to load tools from external MCP servers and integrate them into its graph.
-
-Supported transports: `stdio` (default) and `http` (SSE). Configurable via the `MCP_TRANSPORT` variable.
-
-## Tools
-
-All tools use the LangChain `@tool` decorator, which converts them into `BaseTool` objects with an automatic JSON schema so the LLM can invoke them.
-
-| Tool | Module | Description |
-|------|--------|-------------|
-| `calculator` | `tools/calculator.py` | Safe AST-based math evaluator. Supports +, -, *, /, **, sqrt, sin, cos, log, pi, e. Does not use `eval()`. |
-| `get_current_datetime` | `tools/datetime_tool.py` | Returns the current date/time in any IANA timezone. |
-| `convert_timezone` | `tools/datetime_tool.py` | Converts a time between two timezones. |
-| `list_directory` | `tools/files.py` | Lists files and folders in a directory with sizes. |
-| `read_csv` | `tools/files.py` | Reads a CSV file with Pandas and returns a preview. |
-| `read_excel` | `tools/files.py` | Reads an Excel file (.xlsx) with OpenPyXL and returns a preview. |
-| `read_text_file` | `tools/files.py` | Reads plain text files. |
-
-### Tool Security
-
-- The calculator uses `ast.parse()` + recursive evaluation — it does not execute arbitrary code.
-- File tools validate existence, type, and maximum size (10 MB).
-- All tools catch exceptions internally and return error messages instead of propagating them.
-
-## Interfaces
-
-| Interface | Module | Technology | Description |
-|-----------|--------|-----------|-------------|
-| **CLI** | `agent/cli.py` | Python REPL | Interactive terminal with ANSI colors, token tracking, and session statistics. Command: `nova` |
-| **Web UI** | `ui/app.py` | Streamlit | Web chat with history, tool usage indicator, and metrics in the sidebar. Command: `streamlit run ui/app.py` |
-| **MCP Server** | `nova_mcp/server.py` | FastMCP | Exposes tools for external consumption. Command: `python -m nova_mcp.server` |
-
-## Token Tracking
-
-| Module | Purpose |
-|--------|---------|
-| `tools/token_counter.py` | Token counting with `tiktoken`. Extracts actual usage from `response_metadata` or estimates using a chars/tokens ratio. |
-| `tools/token_visualizer.py` | Cumulative tracking, statistical reports, cost estimation, and progress bars. |
-
-## Data Dependencies
-
-| Package | Purpose |
-|---------|---------|
-| `pandas` | CSV and Excel reading and analysis |
-| `openpyxl` | Reading engine for .xlsx files |
-| `tiktoken` | Tokenization compatible with OpenAI models |
-| `python-dotenv` | Loading environment variables from `.env` |
-
-## Environment Variables
-
-Documented in `.env.example`:
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `OPENAI_API_KEY` | ✅ | — | OpenAI API key |
-| `NOVA_MODEL_NAME` | No | `gpt-4.1-mini` | LLM model to use |
-| `NOVA_TEMPERATURE` | No | `0.7` | LLM temperature |
-| `MCP_TRANSPORT` | No | `stdio` | MCP transport: `stdio` or `http` |
-| `LANGCHAIN_TRACING_V2` | No | `true` | Enable tracing with LangSmith |
-| `LANGCHAIN_API_KEY` | No | — | LangSmith API key |
-| `LANGCHAIN_PROJECT` | No | `nova-tfm` | Project name in LangSmith |
+Instead of writing custom integrations for every external service, MCP provides a standard protocol. Add a server URL to `mcp_servers.json` and the tools are automatically available to the agent.

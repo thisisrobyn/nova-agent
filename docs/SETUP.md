@@ -1,124 +1,121 @@
-# Installation and Usage Guide
+# Setup Guide
 
-## Prerequisites
+## What you need before starting
 
-- Python ≥ 3.10
-- [uv](https://docs.astral.sh/uv/) (package manager)
-- An OpenAI API key
+- **Python 3.11 or newer** — check with `python3 --version`
+- **Node.js 18 or newer** — check with `node --version`
+- **uv** — Python package manager. Install: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- **An OpenAI API key** — get one at https://platform.openai.com/api-keys
 
-## Installation
+## Step-by-step installation
+
+### 1. Clone the project
 
 ```bash
-# Clone the repository
-git clone <repo-url>
+git clone https://github.com/thisisrober/nova-agent.git
 cd nova-agent
+```
 
-# Create the configuration file
+### 2. Create your configuration file
+
+```bash
 cp .env.example .env
-# Edit .env and add your OPENAI_API_KEY
-
-# Install dependencies
-uv sync
 ```
 
-## Running
+Open `.env` in any text editor and add your OpenAI API key:
 
-### Interactive CLI
+```env
+OPENAI_API_KEY=sk-proj-your-key-here
+```
+
+That's the only required value. Everything else has sensible defaults.
+
+### 3. Install dependencies
 
 ```bash
-# Activate the virtual environment
-source .venv/bin/activate
-
-# Run the agent
-nova
+make install
 ```
 
-The `nova` command opens an interactive REPL. Type your message and press Enter. The agent can automatically use tools to respond. Type `exit` or `quit` to exit.
+This does two things:
+- Installs all Python packages (via `uv sync`)
+- Installs all JavaScript packages for the web UI (via `npm install`)
 
-### Web Interface (Streamlit)
+### 4. Start the app
 
 ```bash
-source .venv/bin/activate
-streamlit run ui/app.py
+make dev
 ```
 
-A chat interface will open in the browser with:
-- Persistent conversation history.
-- Tool usage indicator for each response.
-- Token metrics in the sidebar.
-- Button to clear the conversation.
+This starts **two servers** at the same time:
+- **API server** at http://localhost:8000 (the backend brain)
+- **Web UI** at http://localhost:5173 (the frontend you interact with)
 
-### MCP Server
+Open http://localhost:5173 in your browser and start chatting!
+
+## Other ways to run NOVA
+
+### Web UI + API (recommended)
 
 ```bash
-source .venv/bin/activate
-
-# stdio transport (default)
-python -m nova_mcp.server
-
-# HTTP transport
-MCP_TRANSPORT=http python -m nova_mcp.server
+make dev    # Starts both servers
 ```
 
-## File Structure
+### Terminal mode (CLI)
 
-```
-nova-agent/
-├── agent/          # Agent logic (graph, nodes, state, LLM)
-├── tools/          # Tools (LangChain @tool)
-├── nova_mcp/       # MCP server and client
-├── ui/             # Streamlit web interface
-├── memory/         # Long-term memory (Phase 2)
-├── api/            # REST API with FastAPI (Phase 2)
-├── tests/          # Tests
-├── docs/           # Documentation
-├── .env.example    # Environment variables template
-├── pyproject.toml  # Project configuration
-└── README.md       # Project overview
+If you prefer the command line:
+
+```bash
+make setup  # One-time: adds the "nova" command to your terminal
+source ~/.bashrc
+nova        # Start chatting in your terminal
 ```
 
-## Configuration
+### Just the API
 
-All variables are defined in `.env`:
+```bash
+make api    # Only the backend on port 8000
+```
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `OPENAI_API_KEY` | ✅ | — | OpenAI API key |
-| `NOVA_MODEL_NAME` | No | `gpt-4.1-mini` | Model to use |
-| `NOVA_TEMPERATURE` | No | `0.7` | LLM temperature (0.0 = deterministic, 1.0 = creative) |
-| `MCP_TRANSPORT` | No | `stdio` | MCP transport: `stdio` or `http` |
+### Just the frontend
+
+```bash
+make ui     # Only the React dev server on port 5173
+```
+
+## Optional configuration
+
+All settings go in your `.env` file:
+
+| Variable | Default | What it does |
+|----------|---------|-------------|
+| `OPENAI_API_KEY` | _(none)_ | **Required.** Your OpenAI API key |
+| `NOVA_MODEL_NAME` | `gpt-4.1-mini` | Which AI model to use |
+| `NOVA_TEMPERATURE` | `0.7` | How creative the AI is (0 = precise, 2 = wild) |
+| `MCP_TRANSPORT` | `http` | How the MCP server communicates (`stdio` or `http`) |
+
+> **Tip:** You can also change the model, temperature, and API key from the web UI's Settings panel without editing files.
+
+## Connecting external MCP servers
+
+Edit `mcp_servers.json` in the project root to add external tool servers:
+
+```json
+{
+  "langchain-docs": {
+    "url": "https://docs.langchain.com/mcp",
+    "transport": "streamable_http"
+  }
+}
+```
+
+Restart the API server after editing this file.
 
 ## Troubleshooting
 
-### `Command 'nova' not found`
-
-The `nova` command is only available with the virtualenv activated:
-
-```bash
-source .venv/bin/activate
-nova
-```
-
-If it still does not work, reinstall the package:
-
-```bash
-uv pip install -e .
-```
-
-### `OPENAI_API_KEY not set`
-
-Make sure `.env` contains your key:
-
-```
-OPENAI_API_KEY=sk-...
-```
-
-### Timeout or no response error
-
-Check your internet connection and that the API key is valid. You can test with:
-
-```bash
-python -c "from agent.llm import llm; print(llm)"
-```
-
-If it prints `None`, review the configuration in `.env`.
+| Problem | Solution |
+|---------|---------|
+| `command not found: nova` | Run `source ~/.bashrc` or open a new terminal |
+| `OPENAI_API_KEY not set` | Make sure your `.env` file has the key and it's not empty |
+| Page is blank / white screen | Open browser dev tools (F12) and check the Console tab |
+| `make dev` fails | Try `make install` first, then `make dev` again |
+| Port already in use | Another process is using port 8000 or 5173. Stop it or change the port |

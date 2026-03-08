@@ -2,7 +2,7 @@
 
 # NOVA — Neural Orchestration & Virtual Agent
 
-An advanced conversational AI agent built with **LangGraph**, **LangChain** and **OpenAI**.
+An advanced conversational AI agent built with **LangGraph**, **LangChain**, **FastAPI** and **React**.
 
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Follow-0A66C2?style=for-the-badge&logo=linkedin)](https://www.linkedin.com/in/thisisrober)
 [![GitHub](https://img.shields.io/badge/GitHub-Follow-181717?style=for-the-badge&logo=github)](https://github.com/thisisrober)
@@ -10,170 +10,182 @@ An advanced conversational AI agent built with **LangGraph**, **LangChain** and 
 
 </div>
 
+## What is NOVA?
+
+NOVA is a smart AI assistant that can chat with you, do math, read your files, search documentation, and more — all from a beautiful web interface or your terminal.
+
+Think of it like having a helpful robot on your computer that understands what you ask and uses the right tool to answer.
+
 ## Features
 
-- **LangGraph ReAct agent** — reasoning loop with automatic tool calling
-- **Built-in tools** — calculator, date/time, CSV/Excel/text file reader
-- **MCP server** — expose tools via the Model Context Protocol (FastMCP)
-- **Streamlit UI** — web chat interface with token tracking
-- **CLI** — rich terminal interface with colored output and session stats
-- **Token tracking** — per-message and cumulative token usage with cost estimation
+- 🤖 **AI Chat** — talk to NOVA in natural language; it figures out what to do
+- 🔧 **Built-in tools** — calculator, date/time, CSV/Excel/text file reader, directory listing
+- 🌐 **MCP integration** — connects to external tool servers (e.g. LangChain Docs search)
+- ⚡ **Real-time streaming** — see the response appear word-by-word as NOVA thinks
+- 🎨 **Modern web UI** — React app with dark mode, markdown rendering, syntax-highlighted code blocks, file drag & drop, toast notifications
+- ⚙️ **Runtime settings** — change the OpenAI model, temperature, or API key from the UI without restarting
+- 📝 **Message editing** — edit previous messages and retry failed ones
+- 🖥️ **CLI** — rich terminal interface with colored output and token stats
+- 🔌 **MCP server** — expose NOVA's tools so other apps can use them
+- 📊 **Token tracking** — per-message and cumulative token usage
 
 ## Quick start
 
 ```bash
-# 1. Clone and enter the project
+# 1. Clone the project
 git clone https://github.com/thisisrober/nova-agent/ && cd nova-agent
 
-# 2. Create .env from the template
+# 2. Create your config file
 cp .env.example .env
+# Edit .env and add your OpenAI API key (OPENAI_API_KEY=sk-proj-...)
 
-# 3. Install dependencies and set up the nova command
-make setup
+# 3. Install everything
+make install
 
-# 4. Reload your shell (or open a new terminal)
-source ~/.bashrc
-
-# 5. Run the agent from anywhere
-nova
+# 4. Start both the API server and the web UI
+make dev
 ```
 
-## How to use
+Then open **http://localhost:5173** in your browser. That's it! 🎉
 
-### Environment setup
+## How it works (the simple version)
 
-Copy the template and fill in your OpenAI API key:
-
-```bash
-cp .env.example .env
+```
+You type a message
+        ↓
+   NOVA reads it
+        ↓
+   Does it need a tool?
+     /         \
+   Yes          No
+    ↓            ↓
+ Runs the      Writes a
+  tool          reply
+    ↓            ↓
+ Goes back    Sends it
+ to thinking   to you
 ```
 
-Edit `.env` and set at least the required variable:
+1. You write something like _"What's 2^10?"_
+2. NOVA's brain (an LLM like GPT-4.1) reads your message
+3. It decides: _"I need the calculator tool for this"_
+4. The calculator runs and returns `1024`
+5. NOVA writes a nice reply: _"2¹⁰ = 1024"_
+6. You see the answer appear in real time, word by word
 
-```env
-OPENAI_API_KEY=sk-proj-...       # Required — get one at https://platform.openai.com/api-keys
-NOVA_MODEL_NAME=gpt-4.1-mini    # Optional — LLM model to use
-NOVA_TEMPERATURE=0.7             # Optional — 0.0 = deterministic, 1.0 = creative
-```
-
-### Available commands
-
-All commands are defined in the `Makefile`:
-
-```bash
-make setup       # Install dependencies + add 'nova' alias to ~/.bashrc
-make run         # Run the CLI agent
-make ui          # Launch the Streamlit web interface
-make mcp         # Start the MCP server (stdio transport)
-make mcp-http    # Start the MCP server (HTTP/SSE transport)
-make test        # Run the test suite
-make clean       # Remove caches and build artifacts
-```
-
-### Running the CLI agent
-
-After `make setup`, the `nova` command is available globally (no need to activate the venv):
-
-```bash
-nova
-```
-
-The agent starts an interactive REPL. Type your message and press Enter. It can use tools automatically (calculator, file reading, date/time). Type `exit` to quit.
-
-The agent is aware of your current working directory — it can list files, read CSVs, Excel files and source code from wherever you run it.
-
-### Running the web interface
-
-```bash
-make ui
-```
-
-Opens a Streamlit chat in the browser with conversation history, tool usage indicators and token metrics in the sidebar.
-
-### Running the MCP server
-
-```bash
-make mcp         # stdio transport (for IDE integrations)
-make mcp-http    # HTTP/SSE transport (for remote access)
-```
-
-Exposes NOVA's tools via the Model Context Protocol so external applications can discover and call them.
-
-## Project Structure
+## Project structure
 
 ```
 nova-agent/
-├── agent/
-│   ├── graph.py          # LangGraph StateGraph (agent ↔ tools loop)
-│   ├── nodes.py          # Agent node (LLM + bind_tools) & router
-│   ├── state.py          # NOVAState with add_messages reducer
-│   ├── llm.py            # ChatOpenAI singleton
-│   ├── llm_client.py     # Low-level LLM generate helper
-│   ├── cli.py            # Interactive terminal interface
-│   └── ui_formatter.py   # ANSI colored output
-├── tools/
-│   ├── calculator.py     # Safe math expression evaluator
-│   ├── datetime_tool.py  # Current time & timezone conversion
-│   ├── files.py          # CSV, Excel & text file reader
-│   ├── token_counter.py  # tiktoken-based token counting
-│   └── token_visualizer.py
-├── nova_mcp/
-│   ├── server.py         # FastMCP server (stdio / HTTP)
-│   └── client.py         # MCP client (load external tools)
-├── ui/
-│   └── app.py            # Streamlit chat interface
-├── memory/               # (Phase 2 — RAG + Redis)
-├── api/                  # (Phase 2 — FastAPI)
-├── tests/
-├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── TECH_STACK.md
-│   ├── TOOLS.md
-│   ├── MCP.md
-│   ├── SETUP.md
-│   ├── CLI_GUIDE.md
-│   └── TOKEN_TRACKING.md
-├── pyproject.toml
-├── .env.example
-└── README.md
+├── agent/                  # The brain
+│   ├── graph.py            #   LangGraph agent loop (agent ↔ tools)
+│   ├── nodes.py            #   LLM reasoning node & tool router
+│   ├── state.py            #   Conversation state definition
+│   ├── llm.py              #   OpenAI model setup & runtime config
+│   └── cli.py              #   Terminal chat interface
+├── tools/                  # Things NOVA can do
+│   ├── calculator.py       #   Math expressions (2+2, sqrt(144), etc.)
+│   ├── datetime_tool.py    #   Current time & timezone conversion
+│   ├── files.py            #   Read CSV, Excel, text files, list folders
+│   └── token_counter.py    #   Count tokens for cost tracking
+├── nova_mcp/               # Model Context Protocol
+│   ├── server.py           #   Expose NOVA's tools to other apps
+│   └── client.py           #   Connect to external MCP tool servers
+├── api/                    # REST API (backend)
+│   ├── main.py             #   FastAPI app with MCP lifecycle
+│   ├── routes.py           #   Chat, streaming, settings, history endpoints
+│   └── schemas.py          #   Request/response models
+├── ui/                     # Web interface (frontend)
+│   ├── src/
+│   │   ├── App.tsx         #   Main app shell
+│   │   ├── components/     #   React components (chat, sidebar, UI)
+│   │   ├── hooks/          #   useChat (streaming), useTheme
+│   │   └── lib/            #   API client, types, utilities
+│   ├── package.json        #   Node.js dependencies
+│   └── vite.config.ts      #   Vite build config with API proxy
+├── mcp_servers.json        # External MCP servers to connect to
+├── pyproject.toml          # Python dependencies
+├── Makefile                # All the commands you need
+├── .env.example            # Template for your config
+└── README.md               # You are here!
 ```
+
+## Available commands
+
+All commands live in the `Makefile`:
+
+| Command | What it does |
+|---------|-------------|
+| `make install` | Install all Python and Node.js dependencies |
+| `make setup` | Same as install + add the `nova` shortcut to your terminal |
+| `make dev` | Start both the API and the web UI at the same time |
+| `make api` | Start only the FastAPI backend (port 8000) |
+| `make ui` | Start only the React frontend (port 5173) |
+| `make run` | Run the terminal chat (CLI mode) |
+| `make mcp` | Start the MCP server (stdio transport) |
+| `make mcp-http` | Start the MCP server (HTTP transport) |
+| `make test` | Run the test suite |
+| `make clean` | Remove caches and build artifacts |
 
 ## Configuration
 
-All settings are via environment variables (see `.env.example`):
+Copy `.env.example` to `.env` and fill in your values:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OPENAI_API_KEY` | — | **Required.** OpenAI API key |
-| `NOVA_MODEL_NAME` | `gpt-4.1-mini` | Model to use |
-| `NOVA_TEMPERATURE` | `0.7` | LLM temperature |
-| `MCP_TRANSPORT` | `stdio` | MCP transport (`stdio` or `http`) |
+```env
+# Required — get your key at https://platform.openai.com/api-keys
+OPENAI_API_KEY=sk-proj-...
+
+# Optional — defaults shown
+NOVA_MODEL_NAME=gpt-4.1-mini    # Which OpenAI model to use
+NOVA_TEMPERATURE=0.7             # 0.0 = precise, 2.0 = very creative
+MCP_TRANSPORT=http               # MCP server transport: stdio or http
+```
+
+You can also change the model, temperature, and API key **from the web UI** at any time (click the ⚙️ Settings button in the sidebar).
+
+## External MCP servers
+
+NOVA can connect to external tool servers using the [Model Context Protocol](https://modelcontextprotocol.io/). Configure them in `mcp_servers.json`:
+
+```json
+{
+  "langchain-docs": {
+    "url": "https://docs.langchain.com/mcp",
+    "transport": "streamable_http"
+  }
+}
+```
+
+This gives NOVA a `SearchDocsByLangChain` tool — it can search the LangChain documentation to answer your questions about LangChain.
+
+To add more MCP servers, just add entries to the JSON file and restart the API.
 
 ## Tools
 
-| Tool | Description |
-|------|-------------|
-| `calculator` | Evaluate math expressions (safe `ast`-based eval) |
-| `get_current_datetime` | Get current date/time in any IANA timezone |
-| `convert_timezone` | Convert time between timezones |
-| `read_csv` | Read and preview CSV files |
-| `read_excel` | Read and preview Excel files |
-| `read_text_file` | Read plain text files |
+| Tool | What it does | Example |
+|------|-------------|---------|
+| `calculator` | Evaluate math expressions | _"What's sqrt(144) + 3^2?"_ → 21 |
+| `get_current_datetime` | Get current date and time | _"What time is it in Tokyo?"_ |
+| `convert_timezone` | Convert between timezones | _"Convert 3pm EST to CET"_ |
+| `list_directory` | List files in a folder | _"What files are in /home/user?"_ |
+| `read_csv` | Read CSV files | _"Show me the sales.csv data"_ |
+| `read_excel` | Read Excel files | _"Open report.xlsx"_ |
+| `read_text_file` | Read text files | _"Read my notes.txt"_ |
+| `SearchDocsByLangChain` | Search LangChain docs (MCP) | _"How do I use LangGraph?"_ |
 
-## Architecture
+## Tech stack
 
-```
-User → [HumanMessage] → Agent Node (LLM + bound tools)
-                              │
-                    ┌─────────┴──────────┐
-                    │                    │
-              has tool_calls?        no tool calls
-                    │                    │
-              Tool Node              → END
-              (execute)
-                    │
-              → back to Agent
-```
+| Layer | Technology |
+|-------|-----------|
+| **LLM** | OpenAI GPT-4.1 / GPT-4.1-mini via `langchain-openai` |
+| **Orchestration** | LangGraph + LangChain (ReAct agent pattern) |
+| **Backend** | FastAPI + Uvicorn (async REST API with SSE streaming) |
+| **Frontend** | React 19 + TypeScript + Vite + Tailwind CSS v4 |
+| **Animations** | Framer Motion |
+| **Markdown** | react-markdown + remark-gfm + rehype-highlight |
+| **MCP** | langchain-mcp-adapters (client) + FastMCP (server) |
+| **Token counting** | tiktoken |
+| **Package manager** | uv (Python) + npm (Node.js) |
 
 ## License
 

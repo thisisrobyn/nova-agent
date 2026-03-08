@@ -1,206 +1,113 @@
-# NOVA Tools
+# Tools
 
-This document describes in detail each tool available to the NOVA agent, how they are implemented, and how they interact with the LangGraph graph.
+## What are tools?
 
-## How Tools Work
+Tools are functions that NOVA can use to do things it can't do by just thinking — like math, reading files, or searching the web.
 
-### Registration and Binding
+When you ask NOVA a question, it decides if it can answer from memory or if it needs to use a tool. If it needs a tool, it calls it automatically, reads the result, and writes you a nice answer.
 
-Tools are defined with the LangChain `@tool` decorator in the `tools/` directory. Each decorated function is automatically converted into a `BaseTool` object with:
+## Built-in tools
 
-- **Name**: derived from the function name.
-- **Description**: extracted from the docstring (the LLM reads it to decide when to use the tool).
-- **JSON Schema**: automatically generated from the parameter type hints.
+### `calculator`
 
-In `agent/graph.py`, the `get_tools()` function collects all tools and returns them as a list. This list is used for:
+Does math. Supports basic operations, powers, roots, trig, and more.
 
-1. **`bind_tools()`** in the `agent_node`: binds the tools to the LLM so it can decide when to call them.
-2. **`ToolNode(tools)`**: creates the node that executes the tools when the LLM requests them.
+**Examples:**
+- _"What's 15% of 230?"_ → uses `230 * 0.15`
+- _"Square root of 144"_ → uses `sqrt(144)`
 
-### Execution Flow
+**Supported:** `+`, `-`, `*`, `/`, `//`, `%`, `**`, `sqrt`, `sin`, `cos`, `tan`, `log`, `log10`, `ceil`, `floor`, `abs`, `pi`, `e`
 
-```
-LLM decides to use calculator("sqrt(144)")
-         │
-         ▼
-AIMessage with tool_calls: [{name: "calculator", args: {expression: "sqrt(144)"}}]
-         │
-         ▼
-Router (should_use_tools) → detects tool_calls → sends to tool_node
-         │
-         ▼
-ToolNode executes calculator.invoke({expression: "sqrt(144)"})
-         │
-         ▼
-ToolMessage(content="12.0", name="calculator")
-         │
-         ▼
-Returns to agent_node → LLM reads the result → formulates final response
-```
+📁 `tools/calculator.py`
 
----
+### `get_current_datetime`
 
-## calculator
+Gets the current date and time. You can ask for any timezone.
 
-**Module**: `tools/calculator.py`
+**Examples:**
+- _"What time is it?"_ → current local time
+- _"What time is it in Tokyo?"_ → uses timezone `Asia/Tokyo`
 
-**Purpose**: safely evaluate mathematical expressions.
+📁 `tools/datetime_tool.py`
 
-**Implementation**: uses `ast.parse()` to convert the expression into a Python Abstract Syntax Tree (AST), then recursively evaluates only the allowed nodes. Does not use `eval()` or `exec()`.
+### `convert_timezone`
 
-**Supported operators**: `+`, `-`, `*`, `/`, `//`, `%`, `**`
+Converts a time from one timezone to another.
 
-**Available functions**: `sqrt`, `sin`, `cos`, `tan`, `log`, `log10`, `ceil`, `floor`, `abs`
+**Example:** _"Convert 3pm New York time to London time"_
 
-**Constants**: `pi`, `e`
+📁 `tools/datetime_tool.py`
 
-**Agent usage**:
-```
-User: "What is 15 * 7 + the square root of 81?"
-LLM → calculator(expression="15 * 7 + sqrt(81)")
-Result: "114.0"
-```
+### `list_directory`
 
----
+Lists files and folders in a directory, with sizes and icons.
 
-## get_current_datetime
+**Example:** _"What files are in my Downloads folder?"_
 
-**Module**: `tools/datetime_tool.py`
+📁 `tools/files.py`
 
-**Purpose**: get the current date and time in any timezone.
+### `read_csv`
 
-**Implementation**: uses `datetime.now()` with `ZoneInfo` for IANA timezones.
+Reads a CSV file and shows a preview of the data (first and last rows, column types, shape).
 
-**Parameters**:
-- `timezone_name` (default: `"UTC"`): IANA timezone name (e.g., `"Europe/Madrid"`, `"US/Eastern"`, `"Asia/Tokyo"`).
+**Example:** _"Show me the data in sales.csv"_
 
-**Agent usage**:
-```
-User: "What time is it in Madrid?"
-LLM → get_current_datetime(timezone_name="Europe/Madrid")
-Result: "2026-03-07 19:55:48 CET (UTC+0100)"
-```
+📁 `tools/files.py`
 
----
+### `read_excel`
 
-## convert_timezone
+Reads an Excel (.xlsx) file, same as CSV but for spreadsheets.
 
-**Module**: `tools/datetime_tool.py`
+**Example:** _"Open the report.xlsx file"_
 
-**Purpose**: convert a time from one timezone to another.
+📁 `tools/files.py`
 
-**Parameters**:
-- `time_str`: time in `"HH:MM"` or `"YYYY-MM-DD HH:MM:SS"` format.
-- `from_tz` (default: `"UTC"`): source timezone.
-- `to_tz` (default: `"Europe/Madrid"`): destination timezone.
+### `read_text_file`
 
----
+Reads any plain text file (code, markdown, config files, etc.).
 
-## list_directory
+**Example:** _"Read my notes.txt"_ or _"Show me the main.py file"_
 
-**Module**: `tools/files.py`
+📁 `tools/files.py`
 
-**Purpose**: list files and folders in a directory.
+## MCP tools (from external servers)
 
-**Implementation**: uses `pathlib.Path.iterdir()`. Displays icons (📁/📄), names, and sizes. Hides files starting with `.`.
+These tools come from external MCP servers configured in `mcp_servers.json`.
 
-**Parameters**:
-- `path` (default: `"."`): directory path. Defaults to the current working directory.
+### `SearchDocsByLangChain`
 
-**Agent usage**:
-```
-User: "What files are in the project?"
-LLM → list_directory(path=".")
-Result: list of folders and files in the current directory
+Searches the LangChain documentation. Comes from the LangChain Docs MCP server at `https://docs.langchain.com/mcp`.
+
+**Example:** _"How do I create a LangGraph agent?"_
+
+## How to add a new tool
+
+1. Create a function in the `tools/` folder
+2. Decorate it with `@tool` from LangChain
+3. Write a clear docstring (the AI reads this to know when to use it)
+4. Handle errors inside the function (return an error message, don't raise)
+5. Register it in `agent/graph.py` → `get_tools()`
+
+**Example:**
+
+```python
+from langchain_core.tools import tool
+
+@tool
+def my_new_tool(query: str) -> str:
+    """Search for something cool. Use this when the user asks about cool things."""
+    try:
+        result = do_something(query)
+        return f"Found: {result}"
+    except Exception as e:
+        return f"Error: {e}"
 ```
 
----
+Then add it to `get_tools()` in `agent/graph.py`:
 
-## read_csv
-
-**Module**: `tools/files.py`
-
-**Purpose**: read a CSV file and return a summary with a row preview.
-
-**Implementation**: uses `pandas.read_csv()`. Returns the name, dimensions, columns, and the first rows as a formatted table.
-
-**Parameters**:
-- `file_path`: path to the CSV file.
-- `max_rows` (default: `20`): maximum number of rows in the preview.
-
-**Validations**: file existence, regular file check, maximum size of 10 MB.
-
----
-
-## read_excel
-
-**Module**: `tools/files.py`
-
-**Purpose**: read an Excel file (.xlsx) and return a summary.
-
-**Implementation**: uses `pandas.read_excel()` with the `openpyxl` engine. Shows available sheets, active sheet, dimensions, and preview.
-
-**Parameters**:
-- `file_path`: path to the Excel file.
-- `sheet_name` (default: `""`): sheet name. If empty, reads the first sheet.
-- `max_rows` (default: `20`): maximum number of rows in the preview.
-
----
-
-## read_text_file
-
-**Module**: `tools/files.py`
-
-**Purpose**: read plain text files (source code, configuration, logs, etc.).
-
-**Implementation**: uses `pathlib.Path.read_text()` with UTF-8 encoding.
-
-**Parameters**:
-- `file_path`: path to the file.
-- `max_lines` (default: `100`): maximum number of lines to return.
-
----
-
-## Adding New Tools
-
-To add a new tool:
-
-1. Create the function in `tools/` with the `@tool` decorator:
-   ```python
-   from langchain_core.tools import tool
-
-   @tool
-   def my_tool(parameter: str) -> str:
-       """Clear description of what the tool does.
-
-       Args:
-           parameter: description of the parameter.
-
-       Returns:
-           The result as a string.
-       """
-       try:
-           # logic
-           return result
-       except Exception as e:
-           return f"Error: {e}"
-   ```
-
-2. Register it in `agent/graph.py` inside `get_tools()`:
-   ```python
-   from tools.my_module import my_tool
-
-   def get_tools():
-       return [
-           ...,
-           my_tool,
-       ]
-   ```
-
-3. If you want to expose it via MCP, also add it in `nova_mcp/server.py`.
-
-**Conventions**:
-- Google-style docstring (the LLM reads it to decide when to use the tool).
-- Type hints on all parameters.
-- Catch exceptions internally — never propagate to the agent.
-- Always return `str` (the LLM works with text).
+```python
+local: List[BaseTool] = [
+    # ... existing tools ...
+    my_new_tool,  # ← add here
+]
+```
