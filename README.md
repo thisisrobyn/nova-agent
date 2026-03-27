@@ -40,7 +40,7 @@ cp .env.example .env
 # Edit .env and add your OpenAI API key (OPENAI_API_KEY=sk-proj-...)
 
 # 3. Install everything
-make install
+make install && make setup
 
 # 4. Start both the API server and the web UI
 make dev
