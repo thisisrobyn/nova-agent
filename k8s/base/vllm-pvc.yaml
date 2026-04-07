@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hf-cache
+  namespace: nova
+  labels:
+    app.kubernetes.io/part-of: nova-agent
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      # Qwen2.5-7B-Instruct is ~15GB; allow room for other models
+      storage: 30Gi

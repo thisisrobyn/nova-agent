@@ -1,0 +1,54 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: nova
+  region: us-east-1
+  version: "1.32"
+
+# Use managed IAM policies for addons (EBS CSI, etc.)
+iam:
+  withOIDC: true
+
+managedNodeGroups:
+  # System node group — small on-demand instance for CoreDNS, kube-proxy, etc.
+  - name: system
+    instanceType: t3.medium
+    desiredCapacity: 1
+    minSize: 1
+    maxSize: 2
+    volumeSize: 20
+    labels:
+      role: system
+    tags:
+      project: nova
+
+  # GPU node group — spot g4dn.xlarge for vLLM inference
+  - name: gpu-spot
+    instanceTypes:
+      - g4dn.xlarge
+    desiredCapacity: 0
+    minSize: 0
+    maxSize: 1
+    volumeSize: 50
+    spot: true
+    labels:
+      role: gpu
+      nvidia.com/gpu.present: "true"
+    taints:
+      - key: nvidia.com/gpu
+        value: "true"
+        effect: NoSchedule
+    tags:
+      project: nova
+      k8s.io/cluster-autoscaler/enabled: "true"
+
+addons:
+  - name: vpc-cni
+    attachPolicyARNs:
+      - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+  - name: coredns
+  - name: kube-proxy
+  - name: aws-ebs-csi-driver
+    wellKnownPolicies:
+      ebsCSIController: true

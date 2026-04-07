@@ -1,0 +1,13 @@
+# EKS overlay — AWS EKS with g4dn.xlarge Spot GPU nodes
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - gp3-storageclass.yaml
+  - nova-api.yaml
+  - nova-ui.yaml
+
+patches:
+  - path: vllm-gpu-patch.yaml
+  - path: vllm-pvc-patch.yaml

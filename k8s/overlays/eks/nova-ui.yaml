@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nova-ui
+  namespace: nova
+  labels:
+    app: nova-ui
+    app.kubernetes.io/part-of: nova-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nova-ui
+  template:
+    metadata:
+      labels:
+        app: nova-ui
+    spec:
+      nodeSelector:
+        role: system
+      containers:
+        - name: nova-ui
+          image: IMAGE_PLACEHOLDER_UI
+          ports:
+            - containerPort: 80
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nova-ui
+  namespace: nova
+  labels:
+    app: nova-ui
+    app.kubernetes.io/part-of: nova-agent
+spec:
+  selector:
+    app: nova-ui
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  type: LoadBalancer

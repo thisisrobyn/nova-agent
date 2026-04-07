@@ -1,0 +1,161 @@
+name: Deploy to EKS
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'ui/**'
+      - 'api/**'
+      - 'agent/**'
+      - 'tools/**'
+      - 'memory/**'
+      - 'nova_mcp/**'
+      - 'k8s/**'
+      - 'Dockerfile'
+      - 'pyproject.toml'
+      - '.github/workflows/deploy-eks.yml'
+
+env:
+  AWS_REGION: us-east-1
+  EKS_CLUSTER: nova
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  # ─── Detect what changed ──────────────────────────────
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      ui: ${{ steps.filter.outputs.ui }}
+      api: ${{ steps.filter.outputs.api }}
+      k8s: ${{ steps.filter.outputs.k8s }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            ui:
+              - 'ui/**'
+            api:
+              - 'api/**'
+              - 'agent/**'
+              - 'tools/**'
+              - 'memory/**'
+              - 'nova_mcp/**'
+              - 'Dockerfile'
+              - 'pyproject.toml'
+            k8s:
+              - 'k8s/**'
+
+  # ─── Build & push UI image ────────────────────────────
+  build-ui:
+    needs: changes
+    if: needs.changes.outputs.ui == 'true' || needs.changes.outputs.k8s == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push UI image
+        id: meta
+        run: |
+          IMAGE=${{ env.ECR_REGISTRY }}/nova-ui:${{ github.sha }}
+          docker build -t $IMAGE ui/
+          docker tag $IMAGE ${{ env.ECR_REGISTRY }}/nova-ui:latest
+          docker push $IMAGE
+          docker push ${{ env.ECR_REGISTRY }}/nova-ui:latest
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+
+  # ─── Build & push API image ───────────────────────────
+  build-api:
+    needs: changes
+    if: needs.changes.outputs.api == 'true' || needs.changes.outputs.k8s == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push API image
+        id: meta
+        run: |
+          IMAGE=${{ env.ECR_REGISTRY }}/nova-api:${{ github.sha }}
+          docker build -t $IMAGE .
+          docker tag $IMAGE ${{ env.ECR_REGISTRY }}/nova-api:latest
+          docker push $IMAGE
+          docker push ${{ env.ECR_REGISTRY }}/nova-api:latest
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+
+  # ─── Deploy to EKS ────────────────────────────────────
+  deploy:
+    needs: [changes, build-ui, build-api]
+    if: always() && !failure() && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER }} --region ${{ env.AWS_REGION }}
+
+      - name: Set container images in manifests
+        run: |
+          cd k8s/overlays/eks
+          UI_IMAGE="${{ needs.build-ui.outputs.image }}"
+          API_IMAGE="${{ needs.build-api.outputs.image }}"
+
+          # Use newly built images, or fall back to latest from ECR
+          if [ -z "$UI_IMAGE" ]; then
+            UI_IMAGE="${{ env.ECR_REGISTRY }}/nova-ui:latest"
+          fi
+          if [ -z "$API_IMAGE" ]; then
+            API_IMAGE="${{ env.ECR_REGISTRY }}/nova-api:latest"
+          fi
+
+          # Use kustomize to override image references before applying
+          kustomize edit set image "IMAGE_PLACEHOLDER_UI=${UI_IMAGE}"
+          kustomize edit set image "IMAGE_PLACEHOLDER_API=${API_IMAGE}"
+
+      - name: Apply K8s manifests
+        run: |
+          kubectl apply -k k8s/overlays/eks/
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/nova-ui -n nova --timeout=120s || true
+          kubectl rollout status deployment/nova-api -n nova --timeout=120s || true
+
+      - name: Verify deployment
+        run: |
+          echo "=== Pods ==="
+          kubectl get pods -n nova
+          echo ""
+          echo "=== Services ==="
+          kubectl get svc -n nova

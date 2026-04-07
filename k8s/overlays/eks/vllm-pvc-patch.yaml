@@ -1,0 +1,8 @@
+# Patch PVC to use gp3 StorageClass on EKS
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hf-cache
+  namespace: nova
+spec:
+  storageClassName: gp3
