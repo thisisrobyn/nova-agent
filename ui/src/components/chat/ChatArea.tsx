@@ -146,25 +146,25 @@ export function ChatArea({
       <AnimatePresence>
         {isDragOver && (
           <motion.div
-            className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-primary-50/90 backdrop-blur-sm dark:bg-surface-900/90"
+            className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-surface-950/90 backdrop-blur-sm"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
           >
             <motion.div
-              className="flex h-20 w-20 items-center justify-center rounded-3xl border-2 border-dashed border-primary-400 bg-white/80 dark:border-primary-500 dark:bg-surface-800/80"
+              className="flex h-20 w-20 items-center justify-center rounded-2xl border-2 border-dashed border-primary-500 bg-surface-900/80"
               animate={{ scale: [1, 1.05, 1] }}
               transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
             >
-              <Upload className="h-8 w-8 text-primary-500 dark:text-primary-400" />
+              <Upload className="h-8 w-8 text-primary-500" />
             </motion.div>
             <div className="text-center">
-              <p className="text-lg font-semibold text-primary-700 dark:text-primary-300">
-                Drop files here
+              <p className="text-sm font-semibold text-primary-400 text-glow">
+                drop files here
               </p>
-              <p className="text-sm text-primary-500 dark:text-primary-400">
-                Attach files to the conversation
+              <p className="text-xs text-surface-500">
+                attach to conversation
               </p>
             </div>
           </motion.div>
@@ -208,11 +208,10 @@ export function ChatArea({
 
               {isLoading && (
                 <div className="flex gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-primary-500 dark:text-primary-400">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-primary-500">
                     <NovaSparkle className="h-5 w-5" thinking />
                   </div>
-                  <div className="max-w-[75%] rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-surface-200 dark:bg-surface-800 dark:ring-surface-700">
-                    {/* Tool badges */}
+                  <div className="max-w-[75%] rounded-xl border border-surface-700/50 bg-surface-900 px-4 py-3">
                     {streamingTools.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 pb-1">
                         {streamingTools.map((tool, i) => (
@@ -222,7 +221,7 @@ export function ChatArea({
                     )}
 
                     {streamingContent ? (
-                      <div className="text-surface-800 dark:text-surface-200">
+                      <div className="text-surface-200">
                         <MarkdownRenderer content={streamingContent} />
                         <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-primary-500/70" />
                       </div>
@@ -231,7 +230,7 @@ export function ChatArea({
                         {[0, 1, 2].map((i) => (
                           <motion.span
                             key={i}
-                            className="h-1.5 w-1.5 rounded-full bg-surface-400 dark:bg-surface-500"
+                            className="h-1.5 w-1.5 rounded-full bg-primary-500"
                             animate={{ opacity: [0.3, 1, 0.3] }}
                             transition={{
                               duration: 1,
@@ -249,17 +248,17 @@ export function ChatArea({
 
               {error && !isLoading && (
                 <motion.div
-                  className="mx-auto flex max-w-md items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-900/20"
+                  className="mx-auto flex max-w-md items-center gap-3 rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3"
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                 >
-                  <span className="flex-1 text-sm text-red-700 dark:text-red-400">{error}</span>
+                  <span className="flex-1 text-xs text-red-400">{error}</span>
                   <button
                     onClick={onRetry}
-                    className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg bg-red-100 px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-200 dark:bg-red-800/40 dark:text-red-300 dark:hover:bg-red-800/60"
+                    className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg bg-red-900/30 px-3 py-1.5 text-xs font-medium text-red-400 transition-colors hover:bg-red-900/50"
                   >
                     <RotateCcw className="h-3 w-3" />
-                    Retry
+                    retry
                   </button>
                 </motion.div>
               )}

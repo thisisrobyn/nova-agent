@@ -1,14 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Sidebar, type ChatHistoryEntry } from '@/components/layout/Sidebar';
 import { ChatArea } from '@/components/chat/ChatArea';
-import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { ToastProvider } from '@/components/ui/Toast';
-import { useTheme } from '@/hooks/useTheme';
 import { useChat } from '@/hooks/useChat';
 import { generateSessionId } from '@/lib/utils';
 
 export default function App() {
-  const { theme, setTheme } = useTheme();
   const [activeSessionId, setActiveSessionId] = useState(() => generateSessionId());
   const [chatHistory, setChatHistory] = useState<ChatHistoryEntry[]>([]);
 
@@ -31,7 +28,6 @@ export default function App() {
     loadHistory();
   }, [loadHistory]);
 
-  // Update chat history when messages change
   useEffect(() => {
     if (messages.length === 0) return;
 
@@ -74,20 +70,6 @@ export default function App() {
   return (
     <ToastProvider>
       <div className="relative flex h-screen overflow-hidden">
-        {/* Floating theme toggle */}
-        <div className="fixed right-4 top-4 z-50">
-          <ThemeToggle theme={theme} setTheme={setTheme} />
-        </div>
-
-        <Sidebar
-          totalTokens={totalTokens}
-          iterationCount={iterationCount}
-          chatHistory={chatHistory}
-          activeSessionId={activeSessionId}
-          onSelectSession={handleSelectSession}
-          onNewChat={handleNewChat}
-          onClear={handleClear}
-        />
         <main className="flex-1 overflow-hidden">
           <ChatArea
             messages={messages}
@@ -100,6 +82,15 @@ export default function App() {
             onEditMessage={editMessage}
           />
         </main>
+        <Sidebar
+          totalTokens={totalTokens}
+          iterationCount={iterationCount}
+          chatHistory={chatHistory}
+          activeSessionId={activeSessionId}
+          onSelectSession={handleSelectSession}
+          onNewChat={handleNewChat}
+          onClear={handleClear}
+        />
       </div>
     </ToastProvider>
   );

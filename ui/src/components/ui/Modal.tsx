@@ -44,7 +44,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" />
 
           <motion.div
-            className="relative z-10 w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:bg-surface-900"
+            className="relative z-10 w-full max-w-lg rounded-xl border border-surface-700/50 bg-surface-900 p-6 shadow-2xl"
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}

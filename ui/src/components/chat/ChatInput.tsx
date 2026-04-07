@@ -112,7 +112,7 @@ export function ChatInput({ onSend, isLoading, externalFiles, onExternalFilesCon
   return (
     <motion.form
       onSubmit={handleSubmit}
-      className="overflow-hidden rounded-[1.75rem] border bg-white shadow-lg transition-colors dark:border-surface-700 dark:bg-surface-800"
+      className="overflow-hidden rounded-xl border border-surface-700/50 bg-surface-900 transition-colors focus-within:border-primary-700/50 focus-within:glow-green"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
@@ -130,7 +130,7 @@ export function ChatInput({ onSend, isLoading, externalFiles, onExternalFilesCon
             {files.map((f) => (
               <motion.span
                 key={f.name}
-                className="inline-flex items-center gap-1.5 rounded-full bg-primary-50 px-3 py-1 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary-950/40 px-2.5 py-1 text-xs font-medium text-primary-400 ring-1 ring-primary-800/50"
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.8, opacity: 0 }}
@@ -140,7 +140,7 @@ export function ChatInput({ onSend, isLoading, externalFiles, onExternalFilesCon
                 <button
                   type="button"
                   onClick={() => removeFile(f.name)}
-                  className="ml-0.5 rounded-full p-0.5 hover:bg-primary-100 dark:hover:bg-primary-800/40 cursor-pointer"
+                  className="ml-0.5 rounded-full p-0.5 hover:bg-primary-900/40 cursor-pointer"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -152,7 +152,6 @@ export function ChatInput({ onSend, isLoading, externalFiles, onExternalFilesCon
 
       {/* Input row */}
       <div className="flex items-center gap-2 px-3 py-2.5">
-        {/* File upload */}
         <input
           ref={fileInputRef}
           type="file"
@@ -168,12 +167,11 @@ export function ChatInput({ onSend, isLoading, externalFiles, onExternalFilesCon
           onClick={() => fileInputRef.current?.click()}
           disabled={isLoading}
           title="Attach files"
-          className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-surface-400 transition-colors hover:bg-surface-100 hover:text-surface-600 disabled:opacity-40 dark:hover:bg-surface-700 dark:hover:text-surface-300"
+          className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-surface-500 transition-colors hover:bg-surface-800 hover:text-primary-400 disabled:opacity-40"
         >
-          <Paperclip className="h-[18px] w-[18px]" />
+          <Paperclip className="h-4 w-4" />
         </button>
 
-        {/* Textarea */}
         <textarea
           ref={textareaRef}
           value={value}
@@ -182,18 +180,17 @@ export function ChatInput({ onSend, isLoading, externalFiles, onExternalFilesCon
             adjustHeight();
           }}
           onKeyDown={handleKeyDown}
-          placeholder="Message NOVA..."
+          placeholder="$ message nova..."
           rows={1}
           disabled={isLoading}
-          className="flex-1 resize-none self-center bg-transparent py-1.5 text-sm leading-relaxed text-surface-900 placeholder:text-surface-400 focus:outline-none disabled:opacity-50 dark:text-surface-100 dark:placeholder:text-surface-500"
+          className="flex-1 resize-none self-center bg-transparent py-1.5 text-sm leading-relaxed text-surface-100 placeholder:text-surface-600 focus:outline-none disabled:opacity-50"
         />
 
-        {/* Send */}
         <Button
           type="submit"
           size="icon"
           disabled={!hasContent || isLoading}
-          className="shrink-0 rounded-full"
+          className="shrink-0 rounded-lg"
         >
           <Send className="h-4 w-4" />
         </Button>

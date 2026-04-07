@@ -65,17 +65,17 @@ export function ChatMessage({
     >
       {/* Avatar – assistant only */}
       {!isUser && (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-primary-500 dark:text-primary-400">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-primary-500">
           <NovaSparkle className="h-5 w-5" />
         </div>
       )}
 
       {/* Bubble */}
       <div
-        className={`group relative max-w-[75%] space-y-2 rounded-2xl px-4 py-3 ${
+        className={`group relative max-w-[75%] space-y-2 rounded-xl px-4 py-3 ${
           isUser
-            ? 'bg-primary-600 text-white'
-            : 'bg-white shadow-sm ring-1 ring-surface-200 dark:bg-surface-800 dark:ring-surface-700'
+            ? 'bg-primary-900/40 text-primary-100 ring-1 ring-primary-800/50'
+            : 'border border-surface-700/50 bg-surface-900'
         }`}
       >
         {/* Tool badges */}
@@ -105,19 +105,19 @@ export function ChatMessage({
                 }
                 if (e.key === 'Escape') handleCancelEdit();
               }}
-              className="w-full resize-none rounded-xl bg-white/20 px-2 py-1 text-sm leading-relaxed text-white placeholder:text-white/60 focus:outline-none focus:ring-1 focus:ring-white/40"
+              className="w-full resize-none rounded-lg bg-surface-950/50 px-2 py-1 text-sm leading-relaxed text-primary-100 placeholder:text-surface-500 focus:outline-none focus:ring-1 focus:ring-primary-700"
               rows={1}
             />
             <div className="flex justify-end gap-1.5">
               <button
                 onClick={handleCancelEdit}
-                className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white cursor-pointer"
+                className="rounded-lg p-1 text-surface-500 transition-colors hover:bg-surface-800 hover:text-surface-300 cursor-pointer"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
               <button
                 onClick={handleConfirmEdit}
-                className="rounded-lg p-1 text-white/70 transition-colors hover:bg-white/20 hover:text-white cursor-pointer"
+                className="rounded-lg p-1 text-primary-500 transition-colors hover:bg-primary-900/30 hover:text-primary-400 cursor-pointer"
               >
                 <Check className="h-3.5 w-3.5" />
               </button>
@@ -130,7 +130,7 @@ export function ChatMessage({
           ) : (
             <MarkdownRenderer
               content={content}
-              className="text-surface-800 dark:text-surface-200"
+              className="text-surface-200"
             />
           )}
 
@@ -138,7 +138,7 @@ export function ChatMessage({
         {isUser && !editing && onEdit && (
           <button
             onClick={() => setEditing(true)}
-            className="absolute -bottom-2 -left-2 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-surface-200 text-surface-500 opacity-0 shadow-sm transition-all hover:bg-surface-300 hover:text-surface-700 group-hover:opacity-100 dark:bg-surface-700 dark:text-surface-400 dark:hover:bg-surface-600 dark:hover:text-surface-200"
+            className="absolute -bottom-2 -left-2 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-surface-800 text-surface-500 opacity-0 transition-all hover:bg-surface-700 hover:text-primary-400 group-hover:opacity-100"
             title="Edit message"
           >
             <Pencil className="h-3 w-3" />

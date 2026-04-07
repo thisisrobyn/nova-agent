@@ -52,7 +52,7 @@ function CopyButton({ text }: { text: string }) {
 
 function InlineCode({ children }: { children?: ReactNode }) {
   return (
-    <code className="rounded-md bg-surface-100 px-1.5 py-0.5 text-[0.85em] font-medium text-primary-700 dark:bg-surface-700 dark:text-primary-300">
+    <code className="rounded-md bg-primary-950/40 px-1.5 py-0.5 text-[0.85em] font-medium text-primary-400">
       {children}
     </code>
   );
@@ -84,9 +84,9 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
             const plainText = extractText(codeEl?.props?.children).replace(/\n$/, '');
 
             return (
-              <div className="group/code my-3 overflow-hidden rounded-xl border border-surface-200 bg-surface-900 dark:border-surface-700">
-                <div className="flex items-center justify-between border-b border-surface-700 bg-surface-800 px-4 py-1.5">
-                  <span className="text-xs font-medium text-surface-400">
+              <div className="group/code my-3 overflow-hidden rounded-xl border border-surface-700/50 bg-surface-950">
+                <div className="flex items-center justify-between border-b border-surface-700/50 bg-surface-900 px-4 py-1.5">
+                  <span className="text-[10px] font-medium text-primary-600">
                     {lang || 'code'}
                   </span>
                   <CopyButton text={plainText} />
@@ -131,23 +131,21 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
 
           // Horizontal rule
           hr: () => (
-            <hr className="my-4 border-surface-200 dark:border-surface-700" />
+            <hr className="my-4 border-surface-700/50" />
           ),
 
-          // Blockquote
           blockquote: ({ children }) => (
-            <blockquote className="my-3 border-l-3 border-primary-400 pl-4 italic text-surface-500 dark:border-primary-600 dark:text-surface-400">
+            <blockquote className="my-3 border-l-3 border-primary-700 pl-4 italic text-surface-400">
               {children}
             </blockquote>
           ),
 
-          // Links
           a: ({ href, children }) => (
             <a
               href={href}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-medium text-primary-600 underline decoration-primary-300 underline-offset-2 hover:text-primary-700 dark:text-primary-400 dark:decoration-primary-700 dark:hover:text-primary-300"
+              className="font-medium text-primary-400 underline decoration-primary-700 underline-offset-2 hover:text-primary-300"
             >
               {children}
             </a>
@@ -159,24 +157,23 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
           ),
           em: ({ children }) => <em>{children}</em>,
 
-          // Tables
           table: ({ children }) => (
-            <div className="my-3 overflow-x-auto rounded-xl border border-surface-200 dark:border-surface-700">
-              <table className="min-w-full divide-y divide-surface-200 text-sm dark:divide-surface-700">
+            <div className="my-3 overflow-x-auto rounded-xl border border-surface-700/50">
+              <table className="min-w-full divide-y divide-surface-700/50 text-sm">
                 {children}
               </table>
             </div>
           ),
           thead: ({ children }) => (
-            <thead className="bg-surface-50 dark:bg-surface-800">{children}</thead>
+            <thead className="bg-surface-900">{children}</thead>
           ),
           th: ({ children }) => (
-            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">
+            <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-primary-500">
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="px-3 py-2 text-surface-700 dark:text-surface-300">
+            <td className="px-3 py-2 text-surface-300">
               {children}
             </td>
           ),

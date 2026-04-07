@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Calculator, Clock, Sparkles } from 'lucide-react';
+import { Terminal, Search, Code } from 'lucide-react';
 
 interface WelcomeScreenProps {
   onSuggestion: (text: string) => void;
@@ -7,35 +7,23 @@ interface WelcomeScreenProps {
 
 const SUGGESTIONS = [
   {
-    icon: Calculator,
-    title: 'Calculate',
-    description: 'Math expressions & formulas',
-    prompt: "What's 2^10 * 3.14159?",
-    color: 'text-amber-500',
-    bg: 'bg-amber-50 dark:bg-amber-900/20',
+    icon: Code,
+    title: 'code',
+    description: 'Generate & execute',
+    prompt: 'Write a Python script to find prime numbers up to 1000',
   },
   {
-    icon: Clock,
-    title: 'Date & Time',
-    description: 'Timezones & scheduling',
-    prompt: "What time is it in Tokyo right now?",
-    color: 'text-blue-500',
-    bg: 'bg-blue-50 dark:bg-blue-900/20',
+    icon: Search,
+    title: 'search',
+    description: 'Web queries',
+    prompt: 'What are the latest developments in AI?',
   },
   {
-    icon: Sparkles,
-    title: 'Ask Anything',
-    description: 'General questions & tasks',
+    icon: Terminal,
+    title: 'analyze',
+    description: 'Data & files',
     prompt: 'What can you help me with?',
-    color: 'text-violet-500',
-    bg: 'bg-violet-50 dark:bg-violet-900/20',
   },
-];
-
-const TAGLINES = [
-  'Your AI-powered assistant',
-  'Code, search, analyze',
-  'Ask me anything',
 ];
 
 const containerVariants = {
@@ -73,27 +61,14 @@ export function WelcomeScreen({ onSuggestion }: WelcomeScreenProps) {
 
       {/* Title */}
       <motion.div variants={itemVariants} className="text-center">
-        <h1 className="text-3xl font-bold tracking-tight text-surface-900 dark:text-white">
-          Welcome to{' '}
-          <span className="bg-gradient-to-r from-primary-600 to-primary-400 bg-clip-text text-transparent">
-            NOVA
-          </span>
+        <h1 className="text-2xl font-bold tracking-tight text-surface-100">
+          {'> '}
+          <span className="text-primary-400 text-glow">NOVA</span>
+          <span className="animate-pulse text-primary-500">_</span>
         </h1>
-        <div className="mt-2 h-6 overflow-hidden">
-          <motion.div
-            animate={{ y: [0, -24, -48, 0] }}
-            transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut', times: [0, 0.33, 0.66, 1] }}
-          >
-            {TAGLINES.map((line) => (
-              <p
-                key={line}
-                className="h-6 text-sm text-surface-500 dark:text-surface-400"
-              >
-                {line}
-              </p>
-            ))}
-          </motion.div>
-        </div>
+        <p className="mt-2 text-xs text-surface-500">
+          Neural Orchestration &amp; Virtual Agent
+        </p>
       </motion.div>
 
       {/* Suggestion cards */}
@@ -105,18 +80,18 @@ export function WelcomeScreen({ onSuggestion }: WelcomeScreenProps) {
           <motion.button
             key={s.title}
             onClick={() => onSuggestion(s.prompt)}
-            className="group flex cursor-pointer flex-col gap-2 rounded-2xl border border-surface-200 p-4 text-left transition-all hover:border-primary-300 hover:shadow-md dark:border-surface-700 dark:hover:border-primary-700"
+            className="group flex cursor-pointer flex-col gap-2 rounded-xl border border-surface-700/50 bg-surface-900/50 p-4 text-left transition-all hover:border-primary-700/50 hover:bg-surface-900"
             whileHover={{ scale: 1.02, y: -2 }}
             whileTap={{ scale: 0.98 }}
           >
-            <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${s.bg}`}>
-              <s.icon className={`h-5 w-5 ${s.color}`} />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-950/50 text-primary-500">
+              <s.icon className="h-4 w-4" />
             </div>
             <div>
-              <div className="text-sm font-semibold text-surface-800 dark:text-surface-200">
-                {s.title}
+              <div className="text-xs font-semibold text-surface-200">
+                ./{s.title}
               </div>
-              <div className="text-xs text-surface-400 dark:text-surface-500">
+              <div className="text-[10px] text-surface-500">
                 {s.description}
               </div>
             </div>
@@ -127,9 +102,9 @@ export function WelcomeScreen({ onSuggestion }: WelcomeScreenProps) {
       {/* Hint */}
       <motion.p
         variants={itemVariants}
-        className="text-xs text-surface-400 dark:text-surface-500"
+        className="text-[10px] text-surface-600"
       >
-        Type a message or click a suggestion to get started
+        type a message or click a suggestion to begin
       </motion.p>
     </motion.div>
   );
