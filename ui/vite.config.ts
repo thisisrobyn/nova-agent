@@ -2,12 +2,14 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
-import { readFileSync } from 'fs'
+import { readFileSync, existsSync } from 'fs'
 
-const manifest = JSON.parse(
-  readFileSync(path.resolve(__dirname, '../.release-please-manifest.json'), 'utf-8'),
-);
-const appVersion = manifest['.'] ?? '0.0.0';
+const manifestPath = path.resolve(__dirname, '../.release-please-manifest.json');
+let appVersion = '0.0.0';
+if (existsSync(manifestPath)) {
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+  appVersion = manifest['.'] ?? '0.0.0';
+}
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],

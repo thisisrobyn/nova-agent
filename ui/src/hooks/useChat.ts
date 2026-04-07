@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { sendMessageStream, getHistory, clearHistory } from '@/lib/api';
 import type { ChatMessage, TokenUsage, ToolInfo } from '@/lib/types';
 
@@ -39,6 +39,16 @@ export function useChat(sessionId: string) {
   const idCounter = useRef(0);
   const streamRef = useRef('');
   const lastUserContentRef = useRef('');
+
+  // Reset state when session changes
+  useEffect(() => {
+    setMessages([]);
+    setTotalTokens(0);
+    setIterationCount(0);
+    setError(null);
+    setStreamingContent('');
+    setStreamingTools([]);
+  }, [sessionId]);
 
   const nextId = () => `msg-${++idCounter.current}-${Date.now()}`;
 

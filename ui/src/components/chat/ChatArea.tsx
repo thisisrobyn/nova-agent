@@ -1,20 +1,16 @@
 import { useState, useEffect, useRef, useCallback, type DragEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Upload, RotateCcw } from 'lucide-react';
+import { Upload, RotateCcw, LogIn } from 'lucide-react';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { WelcomeScreen } from './WelcomeScreen';
 import { NovaSparkle } from '@/components/ui/NovaSparkle';
 import { MarkdownRenderer } from '@/components/ui/MarkdownRenderer';
 import { ToolBadge } from './ToolBadge';
+import { GuestBanner } from '@/components/auth/GuestBanner';
 import { useToast } from '@/components/ui/Toast';
+import { isSupported, readFile, type FileReadResult } from '@/lib/fileUtils';
 import type { ToolInfo } from '@/lib/types';
-
-interface AttachedFile {
-  name: string;
-  content: string;
-  size: number;
-}
 
 interface Message {
   id: string;
@@ -30,20 +26,14 @@ interface ChatAreaProps {
   error: string | null;
   streamingContent: string;
   streamingTools: ToolInfo[];
-  onSend: (message: string, files?: AttachedFile[]) => void;
+  onSend: (message: string, files?: FileReadResult[]) => void;
   onRetry: () => void;
   onEditMessage: (id: string, newContent: string) => void;
-}
-
-const TEXT_EXTENSIONS = new Set([
-  'txt', 'md', 'csv', 'json', 'py', 'js', 'ts', 'tsx', 'jsx',
-  'html', 'css', 'xml', 'yaml', 'yml', 'toml', 'ini', 'cfg',
-  'log', 'sh', 'bash', 'sql', 'env', 'gitignore', 'dockerfile',
-]);
-
-function isTextFile(name: string): boolean {
-  const ext = name.split('.').pop()?.toLowerCase() ?? '';
-  return TEXT_EXTENSIONS.has(ext);
+  isGuest?: boolean;
+  guestMessageCount?: number;
+  guestMaxMessages?: number;
+  guestLimitReached?: boolean;
+  onLogin?: () => void;
 }
 
 export function ChatArea({
@@ -55,12 +45,21 @@ export function ChatArea({
   onSend,
   onRetry,
   onEditMessage,
+  isGuest = false,
+  guestMessageCount = 0,
+  guestMaxMessages = 5,
+  guestLimitReached = false,
+  onLogin,
 }: ChatAreaProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [droppedFiles, setDroppedFiles] = useState<AttachedFile[]>([]);
+  const [droppedFiles, setDroppedFiles] = useState<FileReadResult[]>([]);
   const dragCounter = useRef(0);
   const { toast } = useToast();
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  // Show banner after first guest message
+  const showGuestBanner = isGuest && guestMessageCount > 0 && (!bannerDismissed || guestLimitReached);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -98,27 +97,27 @@ export function ChatArea({
     const files = e.dataTransfer.files;
     if (!files.length) return;
 
-    const newFiles: AttachedFile[] = [];
+    const newFiles: FileReadResult[] = [];
     const rejected: string[] = [];
 
     for (const file of Array.from(files)) {
-      if (!isTextFile(file.name)) {
+      if (!isSupported(file.name)) {
         rejected.push(file.name);
         continue;
       }
       try {
-        const content = await file.text();
-        newFiles.push({ name: file.name, content, size: file.size });
+        const result = await readFile(file);
+        newFiles.push(result);
       } catch {
-        // skip unreadable files
+        rejected.push(file.name);
       }
     }
 
     if (rejected.length > 0) {
       toast(
         rejected.length === 1
-          ? `Unsupported file type: ${rejected[0]}`
-          : `${rejected.length} files with unsupported type`,
+          ? `Unsupported file: ${rejected[0]}`
+          : `${rejected.length} unsupported files`,
         'warning',
       );
     }
@@ -172,17 +171,33 @@ export function ChatArea({
       </AnimatePresence>
 
       {isEmpty && !isLoading ? (
-        /* Welcome layout: content + input centered higher */
+        /* Welcome layout: title + input centered */
         <div className="flex h-full flex-col items-center justify-center px-4 pb-6">
           <div className="mb-8 -mt-16">
-            <WelcomeScreen onSuggestion={(text) => onSend(text)} />
+            <WelcomeScreen />
           </div>
+
+          {/* Guest login prompt */}
+          {isGuest && (
+            <motion.button
+              onClick={onLogin}
+              className="mb-6 flex cursor-pointer items-center gap-2 rounded-lg border border-primary-900/50 bg-primary-950/30 px-5 py-2.5 text-xs font-semibold text-primary-400 transition-all hover:border-primary-700/50 hover:bg-primary-950/50 hover:glow-green"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+            >
+              <LogIn className="h-3.5 w-3.5" />
+              Register or Login to unlock all features
+            </motion.button>
+          )}
+
           <div className="w-full max-w-3xl">
             <ChatInput
               onSend={onSend}
               isLoading={isLoading}
               externalFiles={droppedFiles}
               onExternalFilesConsumed={handleDroppedFilesConsumed}
+              disabled={guestLimitReached}
             />
           </div>
         </div>
@@ -268,12 +283,47 @@ export function ChatArea({
           </div>
 
           <div className="mx-auto w-full max-w-3xl px-4 pb-4">
-            <ChatInput
-              onSend={onSend}
-              isLoading={isLoading}
-              externalFiles={droppedFiles}
-              onExternalFilesConsumed={handleDroppedFilesConsumed}
-            />
+            {/* Guest banner notification */}
+            {showGuestBanner && onLogin && (
+              <GuestBanner
+                messageCount={guestMessageCount}
+                maxMessages={guestMaxMessages}
+                visible={showGuestBanner}
+                onLogin={onLogin}
+                onDismiss={() => setBannerDismissed(true)}
+              />
+            )}
+
+            {/* Blocked state for guests who hit the limit */}
+            {guestLimitReached ? (
+              <motion.div
+                className="flex flex-col items-center gap-3 rounded-xl border border-primary-900/50 bg-surface-900/80 px-6 py-5"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                <p className="text-sm font-semibold text-surface-300">
+                  You&apos;ve reached the guest limit
+                </p>
+                <p className="text-xs text-surface-500">
+                  Create a free account to continue chatting with NOVA
+                </p>
+                <button
+                  onClick={onLogin}
+                  className="mt-1 flex cursor-pointer items-center gap-2 rounded-lg bg-primary-600 px-6 py-2.5 text-sm font-bold text-surface-950 transition-all hover:bg-primary-500 hover:glow-green"
+                >
+                  <LogIn className="h-4 w-4" />
+                  Register or Login
+                </button>
+              </motion.div>
+            ) : (
+              <ChatInput
+                onSend={onSend}
+                isLoading={isLoading}
+                externalFiles={droppedFiles}
+                onExternalFilesConsumed={handleDroppedFilesConsumed}
+                disabled={guestLimitReached}
+              />
+            )}
           </div>
         </>
       )}

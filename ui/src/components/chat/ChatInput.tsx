@@ -3,34 +3,19 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Paperclip, X, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
-
-interface AttachedFile {
-  name: string;
-  content: string;
-  size: number;
-}
+import { isSupported, readFile, type FileReadResult } from '@/lib/fileUtils';
 
 interface ChatInputProps {
-  onSend: (message: string, files?: AttachedFile[]) => void;
+  onSend: (message: string, files?: FileReadResult[]) => void;
   isLoading: boolean;
-  externalFiles?: AttachedFile[];
+  externalFiles?: FileReadResult[];
   onExternalFilesConsumed?: () => void;
+  disabled?: boolean;
 }
 
-const TEXT_EXTENSIONS = new Set([
-  'txt', 'md', 'csv', 'json', 'py', 'js', 'ts', 'tsx', 'jsx',
-  'html', 'css', 'xml', 'yaml', 'yml', 'toml', 'ini', 'cfg',
-  'log', 'sh', 'bash', 'sql', 'env', 'gitignore', 'dockerfile',
-]);
-
-function isTextFile(name: string): boolean {
-  const ext = name.split('.').pop()?.toLowerCase() ?? '';
-  return TEXT_EXTENSIONS.has(ext);
-}
-
-export function ChatInput({ onSend, isLoading, externalFiles, onExternalFilesConsumed }: ChatInputProps) {
+export function ChatInput({ onSend, isLoading, externalFiles, onExternalFilesConsumed, disabled = false }: ChatInputProps) {
   const [value, setValue] = useState('');
-  const [files, setFiles] = useState<AttachedFile[]>([]);
+  const [files, setFiles] = useState<FileReadResult[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -55,31 +40,31 @@ export function ChatInput({ onSend, isLoading, externalFiles, onExternalFilesCon
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
   };
 
   const handleFiles = async (fileList: FileList) => {
-    const newFiles: AttachedFile[] = [];
+    const newFiles: FileReadResult[] = [];
     const rejected: string[] = [];
 
     for (const file of Array.from(fileList)) {
-      if (!isTextFile(file.name)) {
+      if (!isSupported(file.name)) {
         rejected.push(file.name);
         continue;
       }
       try {
-        const content = await file.text();
-        newFiles.push({ name: file.name, content, size: file.size });
+        const result = await readFile(file);
+        newFiles.push(result);
       } catch {
-        // skip unreadable files
+        rejected.push(file.name);
       }
     }
 
     if (rejected.length > 0) {
       toast(
         rejected.length === 1
-          ? `Unsupported file type: ${rejected[0]}`
-          : `${rejected.length} files with unsupported type`,
+          ? `Unsupported file: ${rejected[0]}`
+          : `${rejected.length} unsupported files`,
         'warning',
       );
     }
@@ -93,7 +78,7 @@ export function ChatInput({ onSend, isLoading, externalFiles, onExternalFilesCon
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if ((!value.trim() && files.length === 0) || isLoading) return;
+    if ((!value.trim() && files.length === 0) || isLoading || disabled) return;
     onSend(value.trim(), files.length > 0 ? files : undefined);
     setValue('');
     setFiles([]);
@@ -151,7 +136,7 @@ export function ChatInput({ onSend, isLoading, externalFiles, onExternalFilesCon
       </AnimatePresence>
 
       {/* Input row */}
-      <div className="flex items-center gap-2 px-3 py-2.5">
+      <div className="flex items-end gap-2 px-4 py-3">
         <input
           ref={fileInputRef}
           type="file"
@@ -167,7 +152,7 @@ export function ChatInput({ onSend, isLoading, externalFiles, onExternalFilesCon
           onClick={() => fileInputRef.current?.click()}
           disabled={isLoading}
           title="Attach files"
-          className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-surface-500 transition-colors hover:bg-surface-800 hover:text-primary-400 disabled:opacity-40"
+          className="mb-1 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-surface-500 transition-colors hover:bg-surface-800 hover:text-primary-400 disabled:opacity-40"
         >
           <Paperclip className="h-4 w-4" />
         </button>
@@ -181,16 +166,16 @@ export function ChatInput({ onSend, isLoading, externalFiles, onExternalFilesCon
           }}
           onKeyDown={handleKeyDown}
           placeholder="$ message nova..."
-          rows={1}
-          disabled={isLoading}
-          className="flex-1 resize-none self-center bg-transparent py-1.5 text-sm leading-relaxed text-surface-100 placeholder:text-surface-600 focus:outline-none disabled:opacity-50"
+          rows={2}
+          disabled={isLoading || disabled}
+          className="flex-1 resize-none bg-transparent py-2 text-sm leading-relaxed text-surface-100 placeholder:text-surface-600 focus:outline-none disabled:opacity-50"
         />
 
         <Button
           type="submit"
           size="icon"
-          disabled={!hasContent || isLoading}
-          className="shrink-0 rounded-lg"
+          disabled={!hasContent || isLoading || disabled}
+          className="mb-1 shrink-0 rounded-lg"
         >
           <Send className="h-4 w-4" />
         </Button>

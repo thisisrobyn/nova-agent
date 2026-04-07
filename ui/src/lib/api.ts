@@ -102,6 +102,23 @@ export async function sendMessageStream(
   }
 }
 
+/* ── Title generation ─────────────────────────────────────── */
+
+export async function generateTitle(message: string): Promise<string> {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/chat/title`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message }),
+    });
+    if (!res.ok) return message.slice(0, 50);
+    const data = (await res.json()) as { title: string };
+    return data.title;
+  } catch {
+    return message.slice(0, 50) + (message.length > 50 ? '…' : '');
+  }
+}
+
 /* ── Settings ─────────────────────────────────────────────── */
 
 export async function getSettings(): Promise<SettingsData> {

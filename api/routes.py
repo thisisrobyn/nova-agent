@@ -6,7 +6,7 @@ import json
 import logging
 from typing import Any, Dict
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
@@ -16,9 +16,14 @@ from api.schemas import (
     ChatMessage,
     ChatRequest,
     ChatResponse,
+    CreateApiKeyRequest,
+    ApiKeyResponse,
+    ApiKeyListResponse,
     HistoryResponse,
     SettingsResponse,
     SettingsUpdate,
+    TitleRequest,
+    TitleResponse,
     ToolInfo,
 )
 
@@ -193,6 +198,36 @@ async def chat_stream(request: ChatRequest):
     )
 
 
+# ── Title generation ─────────────────────────────────────────────
+
+@router.post("/chat/title", response_model=TitleResponse)
+async def generate_title(request: TitleRequest) -> TitleResponse:
+    """Generate a short chat title from the first user message."""
+    from agent.llm import get_llm
+
+    model = get_llm()
+    fallback = request.message[:50] + ("…" if len(request.message) > 50 else "")
+
+    if not model:
+        return TitleResponse(title=fallback)
+
+    try:
+        response = await model.ainvoke([
+            HumanMessage(
+                content=(
+                    "Generate a very short title (max 6 words) for a chat that "
+                    f'starts with: "{request.message[:300]}". '
+                    "Reply with ONLY the title, no quotes, no punctuation at the end."
+                )
+            )
+        ])
+        title = str(response.content).strip().strip('"\'')[:60]
+        return TitleResponse(title=title or fallback)
+    except Exception:
+        logger.exception("Title generation failed")
+        return TitleResponse(title=fallback)
+
+
 # ── Settings endpoints ──────────────────────────────────────────────
 
 @router.get("/settings", response_model=SettingsResponse)
@@ -208,7 +243,57 @@ async def update_settings(body: SettingsUpdate) -> SettingsResponse:
         api_key=body.openai_api_key,
         model_name=body.model_name,
         temperature=body.temperature,
+        base_url=body.openai_api_base,
     )
     if not ok:
         raise HTTPException(status_code=400, detail="Failed to apply settings")
     return SettingsResponse(**get_settings())
+
+
+# ── Developer / API Key endpoints ───────────────────────────────────
+
+@router.post("/developer/keys", response_model=ApiKeyResponse)
+async def create_api_key(
+    body: CreateApiKeyRequest,
+    request: Request,
+):
+    """Generate a new API key for the authenticated user."""
+    from api.auth import get_current_user
+    from api.db import create_api_key as db_create_key
+
+    user = await get_current_user(request)
+    result = await db_create_key(
+        user_id=user.sub,
+        user_email=user.email,
+        user_name=user.name,
+        key_name=body.key_name,
+    )
+    return ApiKeyResponse(
+        api_key=result["api_key"],
+        key_name=result["key_name"],
+        created_at=result["created_at"],
+    )
+
+
+@router.get("/developer/keys", response_model=ApiKeyListResponse)
+async def list_api_keys(request: Request):
+    """List all API keys for the authenticated user (masked)."""
+    from api.auth import get_current_user
+    from api.db import list_api_keys as db_list_keys
+
+    user = await get_current_user(request)
+    keys = await db_list_keys(user.sub)
+    return ApiKeyListResponse(keys=keys)
+
+
+@router.delete("/developer/keys/{key_id}")
+async def revoke_api_key(key_id: str, request: Request):
+    """Revoke an API key."""
+    from api.auth import get_current_user
+    from api.db import revoke_api_key as db_revoke_key
+
+    user = await get_current_user(request)
+    ok = await db_revoke_key(user.sub, key_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="API key not found")
+    return {"status": "revoked", "key_id": key_id}

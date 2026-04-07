@@ -612,3 +612,31 @@ Cada imagen se tagea con el SHA del commit para trazabilidad.
 
 > **Nota**: El CI/CD **no** escala el nodo GPU automáticamente. Debes encenderlo
 > manualmente con `make eks-gpu-scale NODES=1` cuando necesites vLLM.
+
+---
+
+## Autenticación y API Keys
+
+El sistema usa **AWS Cognito** para autenticación de usuarios web y **API keys**
+para acceso programático (CLI, scripts, integraciones).
+
+### Flujo completo
+
+```
+┌──────────────┐     JWT (Cognito)     ┌─────────────────┐
+│  NOVA Web UI │ ────────────────────► │                 │
+└──────────────┘                       │  NOVA API       │     ┌─────────────┐
+                                       │  (FastAPI)      │────►│ vLLM Pod    │
+┌──────────────┐     API Key           │                 │     │ (GPU)       │
+│  CLI/Scripts │ ────────────────────► │                 │     └─────────────┘
+└──────────────┘                       └─────────────────┘
+```
+
+### Generar y usar API keys
+
+1. Inicia sesión en la UI web
+2. Abre **Settings** → pestaña **Developer**
+3. Genera una clave → `nova-sk-...`
+4. Úsala como `Authorization: Bearer nova-sk-...` en cualquier petición a la API
+
+Para más detalles, consulta [API-KEYS.md](API-KEYS.md).

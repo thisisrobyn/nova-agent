@@ -5,6 +5,9 @@ import {
   Hash,
   Plus,
   Terminal,
+  User,
+  LogOut,
+  Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { formatTokens } from '@/lib/utils';
@@ -16,14 +19,23 @@ export interface ChatHistoryEntry {
   createdAt: number;
 }
 
+export interface UserProfile {
+  name: string;
+  email: string;
+  picture?: string;
+}
+
 interface SidebarProps {
   totalTokens: number;
   iterationCount: number;
   chatHistory: ChatHistoryEntry[];
   activeSessionId: string;
+  user?: UserProfile | null;
   onSelectSession: (id: string) => void;
   onNewChat: () => void;
   onClear: () => void;
+  onLogout?: () => void;
+  onOpenSettings?: () => void;
 }
 
 export function Sidebar({
@@ -31,9 +43,12 @@ export function Sidebar({
   iterationCount,
   chatHistory,
   activeSessionId,
+  user,
   onSelectSession,
   onNewChat,
   onClear,
+  onLogout,
+  onOpenSettings,
 }: SidebarProps) {
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col border-l border-primary-900/30 bg-surface-900/50">
@@ -110,6 +125,53 @@ export function Sidebar({
           <Trash2 className="h-3.5 w-3.5" /> clear
         </Button>
       </div>
+
+      {/* User profile */}
+      {user && (
+        <div className="border-t border-primary-900/30 p-3">
+          <div className="flex items-center gap-2.5 rounded-lg px-2 py-2">
+            <button
+              onClick={onOpenSettings}
+              className="flex shrink-0 cursor-pointer items-center justify-center"
+              title="Profile settings"
+            >
+              {user.picture ? (
+                <img
+                  src={user.picture}
+                  alt={user.name}
+                  className="h-7 w-7 rounded-full ring-1 ring-primary-800/50 transition-all hover:ring-primary-500/50"
+                />
+              ) : (
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary-950/50 ring-1 ring-primary-800/50 transition-all hover:ring-primary-500/50">
+                  <User className="h-3.5 w-3.5 text-primary-500" />
+                </div>
+              )}
+            </button>
+            <button
+              onClick={onOpenSettings}
+              className="min-w-0 flex-1 cursor-pointer text-left transition-colors hover:opacity-80"
+              title="Profile settings"
+            >
+              <p className="truncate text-xs font-medium text-surface-200">{user.name}</p>
+              <p className="truncate text-[10px] text-surface-500">{user.email}</p>
+            </button>
+            <button
+              onClick={onOpenSettings}
+              title="Settings"
+              className="shrink-0 cursor-pointer rounded-lg p-1.5 text-surface-500 transition-colors hover:bg-surface-800 hover:text-primary-400"
+            >
+              <Settings className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={onLogout}
+              title="Sign out"
+              className="shrink-0 cursor-pointer rounded-lg p-1.5 text-surface-500 transition-colors hover:bg-surface-800 hover:text-red-400"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

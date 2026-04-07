@@ -34,7 +34,7 @@ run: ## Run the NOVA agent CLI
 	@$(NOVA_BIN)
 
 api: ## Run the FastAPI backend (port 8000)
-	@$(PYTHON) -m uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+	@$(PYTHON) -m uvicorn api.main:app --reload --host 0.0.0.0 --port 8000 --reload-exclude '.venv'
 
 ui: ## Run the React dev server (port 5173)
 	@cd ui && npm run dev
