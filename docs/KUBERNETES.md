@@ -162,7 +162,7 @@ manifests y **overlays** que la modifican para distintos entornos (local vs EKS)
                  │  ├── ebs-csi-driver                            │
                  │  └── (futuro: FastAPI, UI)                     │
                  │                                                 │
-                 │  Node Group "gpu-spot" (g4dn.xlarge, spot)     │
+                 │  Node Group "gpu" (g4dn.xlarge, on-demand)     │
                  │  ├── NVIDIA Device Plugin                      │
                  │  └── Pod: vLLM (Qwen2.5-7B-AWQ)               │
                  │       └── Service: nova-llm:8000 (ClusterIP)   │
@@ -202,10 +202,11 @@ k8s/
 
 | Aspecto | Local | EKS |
 |---------|-------|-----|
+| **Node Group `gpu`** (on-demand) | | |
 | GPU | Acceso automático vía `/dev/dxg` | Requiere `nvidia.com/gpu: 1` explícito |
 | Storage | PVC con StorageClass por defecto del host | PVC con StorageClass `gp3` (EBS) |
 | Scheduling | Nodo único, sin restricciones | `nodeSelector: role: gpu` + tolerations |
-| Coste | Solo electricidad | ~$0.16-0.20/h (spot) + $0.10/h (control plane) |
+| Coste | Solo electricidad | ~$0.526/h (on-demand) + $0.10/h (control plane) |
 
 ---
 
@@ -372,26 +373,25 @@ args:
 |------------|-----------|-------------------|-------|
 | EKS Control Plane | $0.10 | ~$73 | Siempre activo |
 | `t3.medium` (system) | $0.042 | ~$30 | 1 nodo on-demand |
-| `g4dn.xlarge` (GPU spot) | $0.16-0.20 | ~$115-144 | Solo cuando está activo |
+| `g4dn.xlarge` (GPU) | $0.526 | ~$379 | Solo cuando está activo |
 | EBS gp3 (30 Gi) | — | ~$2.40 | Solo existe si el PVC está creado |
-| **Total (GPU 24/7)** | | **~$220-250/mes** | |
+| **Total (GPU 24/7)** | | **~$484/mes** | |
 | **Total (GPU apagado)** | | **~$103/mes** | Solo control plane + system |
 
 ### Estrategias de ahorro
 
 1. **Escalar GPU a 0 cuando no la uses**: `make eks-gpu-scale NODES=0`
-   → Pasa de ~$0.30/h a ~$0.14/h (solo control plane + system)
-2. **Spot instances**: ya configuradas, ~70% ahorro vs on-demand
-3. **Apagar el nodo system también**: con Karpenter o escalando a 0 manualmente
-4. **Eliminar el cluster** cuando no lo necesites por días:
+   → Pasa de ~$0.63/h a ~$0.14/h (solo control plane + system)
+2. **Apagar el nodo system también**: con Karpenter o escalando a 0 manualmente
+3. **Eliminar el cluster** cuando no lo necesites por días:
    `eksctl delete cluster --name nova --region us-east-1`
 
 ### Con $200 de créditos
 
 | Escenario | Duración estimada |
 |-----------|-------------------|
-| GPU encendida 24/7 | ~25-30 días |
-| GPU 4h/día, resto apagado | ~3-4 meses |
+| GPU encendida 24/7 | ~12-13 días |
+| GPU 4h/día, resto apagado | ~2 meses |
 | Solo control plane + system | ~2 meses |
 
 ---

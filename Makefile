@@ -143,4 +143,4 @@ eks-status: ## Show EKS cluster and node status
 	@kubectl get pods,svc,pvc -n nova
 
 eks-gpu-scale: ## Scale GPU node group (usage: make eks-gpu-scale NODES=1)
-	eksctl scale nodegroup --cluster=nova --name=gpu-spot --nodes=$(NODES) --region=us-east-1
+	aws eks update-nodegroup-config --cluster-name nova --nodegroup-name gpu --scaling-config minSize=0,maxSize=1,desiredSize=$(NODES) --region us-east-1

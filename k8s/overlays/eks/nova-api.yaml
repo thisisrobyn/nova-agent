@@ -20,7 +20,8 @@ spec:
         role: system
       containers:
         - name: nova-api
-          image: IMAGE_PLACEHOLDER_API
+          image: 821184871640.dkr.ecr.us-east-1.amazonaws.com/nova-api:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8000
               name: http

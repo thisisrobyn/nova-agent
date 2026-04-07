@@ -23,15 +23,14 @@ managedNodeGroups:
     tags:
       project: nova
 
-  # GPU node group — spot g4dn.xlarge for vLLM inference
-  - name: gpu-spot
+  # GPU node group — on-demand g4dn.xlarge for vLLM inference
+  - name: gpu
     instanceTypes:
       - g4dn.xlarge
     desiredCapacity: 0
     minSize: 0
     maxSize: 1
     volumeSize: 50
-    spot: true
     labels:
       role: gpu
       nvidia.com/gpu.present: "true"
