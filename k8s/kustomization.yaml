@@ -1,7 +1,0 @@
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-
-# Default: local overlay (backward compatible with `kubectl apply -k k8s/`)
-# For EKS use: kubectl apply -k k8s/overlays/eks/
-resources:
-  - overlays/local

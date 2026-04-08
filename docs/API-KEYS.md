@@ -1,20 +1,17 @@
 # NOVA API Keys — Developer Guide
 
-> Genera claves programáticas para conectar cualquier cliente al LLM de NOVA
-> desplegado en Kubernetes.
+> Genera claves programáticas para conectar cualquier cliente a la API de NOVA.
 
 ---
 
 ## ¿Qué es una API Key de NOVA?
 
-Una API key te permite acceder al modelo de IA (Qwen2.5-7B) desplegado en el
-clúster Kubernetes de NOVA sin necesidad de pasar por la interfaz web. Es ideal
-para:
+Una API key te permite acceder a la API de NOVA de forma programática sin
+necesidad de pasar por la interfaz web. Es ideal para:
 
-- **NOVA CLI** — usar tu propio LLM en lugar de OpenAI
+- **NOVA CLI** — usar NOVA desde la terminal
 - **Scripts en Python** — automatizaciones con LangChain, requests, etc.
-- **Aplicaciones externas** — cualquier cliente HTTP compatible con la API
-  OpenAI-compatible de vLLM
+- **Aplicaciones externas** — cualquier cliente HTTP
 
 Las claves tienen el formato `nova-sk-{48-hex}` y se almacenan de forma segura
 en DynamoDB. Solo se muestran una vez al crearlas.
@@ -54,26 +51,7 @@ Respuesta:
 
 ## Usar la API Key
 
-### Con curl (API OpenAI-compatible)
-
-El endpoint de NOVA expone una API compatible con OpenAI a través de vLLM:
-
-```bash
-# Si accedes directamente al servicio K8s (port-forward o LoadBalancer)
-curl http://localhost:8000/v1/chat/completions \
-  -H "Authorization: Bearer nova-sk-tu_clave_aqui" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "Qwen/Qwen2.5-7B-Instruct-AWQ",
-    "messages": [
-      {"role": "user", "content": "Hola, ¿qué puedes hacer?"}
-    ],
-    "temperature": 0.7,
-    "max_tokens": 512
-  }'
-```
-
-### Con la API REST de NOVA
+### Con curl
 
 ```bash
 curl -X POST https://tu-dominio/api/v1/chat \
@@ -81,29 +59,8 @@ curl -X POST https://tu-dominio/api/v1/chat \
   -H "Content-Type: application/json" \
   -d '{
     "session_id": "mi-sesion-001",
-    "message": "Explícame qué es Kubernetes"
+    "message": "Explícame qué es LangGraph"
   }'
-```
-
-### Con Python (OpenAI SDK)
-
-```python
-from openai import OpenAI
-
-client = OpenAI(
-    api_key="nova-sk-tu_clave_aqui",
-    base_url="http://localhost:8000/v1",  # URL del servicio vLLM
-)
-
-response = client.chat.completions.create(
-    model="Qwen/Qwen2.5-7B-Instruct-AWQ",
-    messages=[
-        {"role": "user", "content": "¿Qué es un pod en Kubernetes?"}
-    ],
-    temperature=0.7,
-)
-
-print(response.choices[0].message.content)
 ```
 
 ### Con Python (requests)
@@ -135,7 +92,7 @@ from langchain_openai import ChatOpenAI
 llm = ChatOpenAI(
     api_key="nova-sk-tu_clave_aqui",
     base_url="http://localhost:8000/v1",
-    model="Qwen/Qwen2.5-7B-Instruct-AWQ",
+    model="gpt-4.1-mini",
     temperature=0.7,
 )
 
@@ -148,18 +105,8 @@ print(response.content)
 Si usas el CLI de NOVA, puedes configurar tu API key en el `.env`:
 
 ```env
-# En vez de usar OpenAI, apunta al LLM propio de NOVA
 OPENAI_API_KEY=nova-sk-tu_clave_aqui
 OPENAI_API_BASE=http://localhost:8000/v1
-LLM_MODEL=Qwen/Qwen2.5-7B-Instruct-AWQ
-```
-
-O si el servicio está expuesto por un LoadBalancer o Ingress:
-
-```env
-OPENAI_API_KEY=nova-sk-tu_clave_aqui
-OPENAI_API_BASE=https://llm.nova.example.com/v1
-LLM_MODEL=Qwen/Qwen2.5-7B-Instruct-AWQ
 ```
 
 ---
@@ -239,30 +186,6 @@ curl -X DELETE https://tu-dominio/api/v1/developer/keys/3a7f2b1c9d8e4f5a \
 2. La clave se almacena hasheada en DynamoDB
 3. El cliente envía `Authorization: Bearer nova-sk-xxxx`
 4. El backend busca la clave en DynamoDB y verifica que esté activa
-
----
-
-## Conexión con Kubernetes
-
-El LLM de NOVA (vLLM con Qwen2.5-7B-Instruct-AWQ) corre como un pod en
-el clúster EKS. La API key **no** autentica directamente contra vLLM, sino
-contra la API de NOVA que actúa como proxy:
-
-```
-Cliente → API Key → NOVA API (FastAPI) → vLLM Service (ClusterIP) → GPU Pod
-```
-
-Para acceso directo al modelo (sin pasar por NOVA API), se usa la clave vLLM
-interna configurada como secreto de Kubernetes:
-
-```bash
-# Port-forward al servicio vLLM
-kubectl port-forward svc/nova-llm 8000:8000 -n nova
-
-# Usar con la clave vLLM interna (no la API key de NOVA)
-curl http://localhost:8000/v1/models \
-  -H "Authorization: Bearer <VLLM_API_KEY>"
-```
 
 ---
 
