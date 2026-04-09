@@ -3,83 +3,128 @@
 Exposes a module-level ``llm`` singleton and helpers for runtime
 reconfiguration via the Settings panel.
 
-Supports both OpenAI and OpenAI-compatible APIs (e.g. vLLM) via
-the ``OPENAI_API_BASE`` environment variable.
+Uses Ollama as the local LLM provider — no external API keys required.
 """
 
 import logging
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
+import httpx
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 
 logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-AVAILABLE_MODELS: list[str] = [
-    "gpt-4.1",
-    "gpt-4.1-mini",
-    # vLLM / local models (name must match the served model)
-    "Qwen/Qwen2.5-7B-Instruct-AWQ",
-]
+# ── Ollama model catalogue (tier → list of known model names) ────────
 
-MODEL_NAME: str = os.getenv("NOVA_MODEL_NAME", "gpt-4.1-mini")
+OLLAMA_MODEL_TIERS: dict[str, list[str]] = {
+    "basic": [
+        "gemma3:1b",
+        "llama3.2:1b",
+        "qwen3:1.7b",
+        "phi4-mini",
+        "deepseek-r1:1.5b",
+        "smollm2:1.7b",
+    ],
+    "intermediate": [
+        "gemma3:4b",
+        "llama3.2:3b",
+        "llama3.1:8b",
+        "qwen3:8b",
+        "mistral",
+        "phi4",
+        "deepseek-r1:8b",
+    ],
+    "advanced": [
+        "gemma4:27b",
+        "llama3.3:70b",
+        "qwen3:32b",
+        "deepseek-r1:32b",
+        "command-r:35b",
+    ],
+}
+
+# Flat reverse lookup: model_name → tier
+_MODEL_TO_TIER: dict[str, str] = {
+    m: tier for tier, models in OLLAMA_MODEL_TIERS.items() for m in models
+}
+
+OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+MODEL_NAME: str = os.getenv("NOVA_MODEL_NAME", "gemma3:4b")
 TEMPERATURE: float = float(os.getenv("NOVA_TEMPERATURE", "0.7"))
-BASE_URL: str | None = os.getenv("OPENAI_API_BASE")
 
-_api_key = os.getenv("OPENAI_API_KEY")
+llm: ChatOllama | None = None
 
-llm: ChatOpenAI | None = None
-
-if _api_key:
-    try:
-        llm = ChatOpenAI(
-            model=MODEL_NAME,
-            temperature=TEMPERATURE,
-            api_key=_api_key,
-            **({"base_url": BASE_URL} if BASE_URL else {}),
-        )
-        logger.info(
-            "ChatOpenAI initialised – model=%s base_url=%s",
-            MODEL_NAME,
-            BASE_URL or "default (OpenAI)",
-        )
-    except Exception as e:
-        logger.error("Failed to initialise ChatOpenAI: %s", e)
-else:
-    logger.warning("OPENAI_API_KEY not set – LLM unavailable")
+try:
+    llm = ChatOllama(
+        model=MODEL_NAME,
+        temperature=TEMPERATURE,
+        base_url=OLLAMA_BASE_URL,
+    )
+    logger.info(
+        "ChatOllama initialised – model=%s base_url=%s",
+        MODEL_NAME,
+        OLLAMA_BASE_URL,
+    )
+except Exception as e:
+    logger.error("Failed to initialise ChatOllama: %s", e)
 
 
-def get_llm() -> ChatOpenAI | None:
+def get_llm() -> ChatOllama | None:
     """Return the configured LLM instance (may be ``None``)."""
     return llm
 
 
+async def list_ollama_models() -> list[dict[str, Any]]:
+    """Query the local Ollama instance for downloaded models.
+
+    Returns a list of dicts with ``name``, ``size``, ``modified_at``,
+    and ``tier`` (basic / intermediate / advanced / unknown).
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5)
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as exc:
+        logger.warning("Cannot reach Ollama at %s: %s", OLLAMA_BASE_URL, exc)
+        return []
+
+    models: list[dict[str, Any]] = []
+    for m in data.get("models", []):
+        name: str = m.get("name", "")
+        # Determine tier from catalogue; fall back to "unknown"
+        tier = _MODEL_TO_TIER.get(name, "unknown")
+        models.append({
+            "name": name,
+            "size": m.get("size", 0),
+            "modified_at": m.get("modified_at", ""),
+            "tier": tier,
+        })
+    return sorted(models, key=lambda x: x["name"])
+
+
 def get_settings() -> dict:
-    """Return current LLM settings with a masked API key."""
-    raw_key = os.getenv("OPENAI_API_KEY", "")
-    masked = ("•" * 8 + raw_key[-4:]) if len(raw_key) > 4 else ""
+    """Return current LLM / Ollama settings."""
     return {
-        "openai_api_key_masked": masked,
-        "has_api_key": bool(raw_key),
         "model_name": MODEL_NAME,
         "temperature": TEMPERATURE,
-        "available_models": AVAILABLE_MODELS,
-        "openai_api_base": BASE_URL or "",
+        "ollama_base_url": OLLAMA_BASE_URL,
+        "model_tiers": OLLAMA_MODEL_TIERS,
     }
 
 
 def reinitialize_llm(
-    api_key: Optional[str] = None,
     model_name: Optional[str] = None,
     temperature: Optional[float] = None,
-    base_url: Optional[str] = None,
+    ollama_base_url: Optional[str] = None,
 ) -> bool:
     """Reinitialize the LLM with new parameters and persist to ``.env``."""
-    global llm, MODEL_NAME, TEMPERATURE, BASE_URL
+    global llm, MODEL_NAME, TEMPERATURE, OLLAMA_BASE_URL
 
     if model_name is not None:
         MODEL_NAME = model_name
@@ -91,36 +136,21 @@ def reinitialize_llm(
         os.environ["NOVA_TEMPERATURE"] = str(temperature)
         _update_env_file("NOVA_TEMPERATURE", str(temperature))
 
-    if api_key:
-        os.environ["OPENAI_API_KEY"] = api_key
-        _update_env_file("OPENAI_API_KEY", api_key)
-
-    if base_url is not None:
-        # Empty string clears the override → use default OpenAI endpoint
-        BASE_URL = base_url or None
-        if BASE_URL:
-            os.environ["OPENAI_API_BASE"] = BASE_URL
-            _update_env_file("OPENAI_API_BASE", BASE_URL)
-        else:
-            os.environ.pop("OPENAI_API_BASE", None)
-            _update_env_file("OPENAI_API_BASE", "")
-
-    key = os.getenv("OPENAI_API_KEY")
-    if not key:
-        logger.warning("Cannot reinitialize LLM – no API key")
-        return False
+    if ollama_base_url is not None:
+        OLLAMA_BASE_URL = ollama_base_url
+        os.environ["OLLAMA_BASE_URL"] = ollama_base_url
+        _update_env_file("OLLAMA_BASE_URL", ollama_base_url)
 
     try:
-        llm = ChatOpenAI(
+        llm = ChatOllama(
             model=MODEL_NAME,
             temperature=TEMPERATURE,
-            api_key=key,
-            **({"base_url": BASE_URL} if BASE_URL else {}),
+            base_url=OLLAMA_BASE_URL,
         )
         logger.info(
             "LLM reinitialised – model=%s base_url=%s temp=%.2f",
             MODEL_NAME,
-            BASE_URL or "default (OpenAI)",
+            OLLAMA_BASE_URL,
             TEMPERATURE,
         )
         return True

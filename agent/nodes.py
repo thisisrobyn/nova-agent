@@ -36,7 +36,7 @@ async def agent_node(state: NOVAState) -> Dict[str, Any]:
     """
     llm = get_llm()
     if llm is None:
-        fallback = AIMessage(content="Error: LLM not configured. Check OPENAI_API_KEY.")
+        fallback = AIMessage(content="Error: LLM not configured. Check that Ollama is running.")
         return {"messages": [fallback]}
 
     # Import tools here to avoid circular imports

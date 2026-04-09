@@ -1,6 +1,6 @@
 """Low-level LLM generation helper.
 
-Wraps the configured ChatOpenAI instance with multiple call-pattern
+Wraps the configured ChatOllama instance with multiple call-pattern
 fallbacks and automatic token usage extraction / estimation.
 """
 

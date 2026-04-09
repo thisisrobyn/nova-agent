@@ -61,53 +61,35 @@ class TitleResponse(BaseModel):
     title: str
 
 
-class SettingsResponse(BaseModel):
-    """Current LLM configuration."""
+# ── Ollama / Settings schemas ────────────────────────────────
 
-    openai_api_key_masked: str = ""
-    has_api_key: bool = False
-    model_name: str = "gpt-4.1-mini"
+class OllamaModel(BaseModel):
+    """A model available in the local Ollama instance."""
+
+    name: str
+    size: int = 0
+    modified_at: str = ""
+    tier: str = "unknown"
+
+
+class OllamaModelsResponse(BaseModel):
+    """List of locally available Ollama models."""
+
+    models: List[OllamaModel] = Field(default_factory=list)
+
+
+class SettingsResponse(BaseModel):
+    """Current LLM configuration (Ollama)."""
+
+    model_name: str = "gemma3:4b"
     temperature: float = 0.7
-    available_models: List[str] = Field(default_factory=list)
-    openai_api_base: str = ""
+    ollama_base_url: str = "http://localhost:11434"
+    model_tiers: Dict[str, List[str]] = Field(default_factory=dict)
 
 
 class SettingsUpdate(BaseModel):
     """Partial update for LLM settings."""
 
-    openai_api_key: Optional[str] = None
     model_name: Optional[str] = None
     temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
-    openai_api_base: Optional[str] = None
-
-
-# ── API Key schemas ──────────────────────────────────────────
-
-class CreateApiKeyRequest(BaseModel):
-    """Request to create a new API key."""
-
-    key_name: str = Field(default="Default", max_length=64, description="Friendly name for the key")
-
-
-class ApiKeyResponse(BaseModel):
-    """Full API key (returned only on creation)."""
-
-    api_key: str
-    key_name: str
-    created_at: int
-
-
-class ApiKeyListItem(BaseModel):
-    """Masked API key for listing."""
-
-    api_key_masked: str
-    api_key_id: str
-    key_name: str
-    created_at: int
-    is_active: bool
-
-
-class ApiKeyListResponse(BaseModel):
-    """List of user's API keys."""
-
-    keys: List[ApiKeyListItem] = Field(default_factory=list)
+    ollama_base_url: Optional[str] = None

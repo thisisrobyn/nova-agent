@@ -1,4 +1,4 @@
-import type { ChatResponse, HistoryResponse, SettingsData, StreamEvent, ToolInfo } from './types';
+import type { ChatResponse, HistoryResponse, OllamaModel, SettingsData, StreamEvent, ToolInfo } from './types';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -128,7 +128,7 @@ export async function getSettings(): Promise<SettingsData> {
 }
 
 export async function updateSettings(
-  data: { openai_api_key?: string; model_name?: string; temperature?: number },
+  data: { model_name?: string; temperature?: number; ollama_base_url?: string },
 ): Promise<SettingsData> {
   const res = await fetch(`${API_BASE}/api/v1/settings`, {
     method: 'PUT',
@@ -140,4 +140,13 @@ export async function updateSettings(
     throw new Error(`API error ${res.status}: ${detail}`);
   }
   return res.json() as Promise<SettingsData>;
+}
+
+/* ── Ollama models ────────────────────────────────────────── */
+
+export async function fetchOllamaModels(): Promise<OllamaModel[]> {
+  const res = await fetch(`${API_BASE}/api/v1/ollama/models`);
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  const data = (await res.json()) as { models: OllamaModel[] };
+  return data.models;
 }

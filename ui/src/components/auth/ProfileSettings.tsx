@@ -1,22 +1,14 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  X, User, Lock, Trash2, Key, Copy, Check, Plus, Eye, EyeOff, Loader2, AlertTriangle,
+  X, User, Lock, Trash2, Eye, EyeOff, Loader2, AlertTriangle,
+  Cpu, Zap, Sparkles, CircleDot, RefreshCw, Server,
 } from 'lucide-react';
-import { getIdToken } from '@/lib/auth';
+import { fetchOllamaModels, getSettings, updateSettings } from '@/lib/api';
 import type { AuthUser } from '@/lib/auth';
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
+import type { OllamaModel } from '@/lib/types';
 
 type Tab = 'profile' | 'security' | 'developer';
-
-interface ApiKeyItem {
-  api_key_masked: string;
-  api_key_id: string;
-  key_name: string;
-  created_at: number;
-  is_active: boolean;
-}
 
 interface ProfileSettingsProps {
   user: AuthUser;
@@ -379,74 +371,112 @@ function SecurityTab({
 
 /* ── Developer Tab ────────────────────────────────────────── */
 
+const TIER_META: Record<string, { label: string; icon: React.ReactNode; color: string; desc: string }> = {
+  basic: {
+    label: 'Básico',
+    icon: <Zap className="h-3.5 w-3.5" />,
+    color: 'text-green-400 border-green-900/50 bg-green-950/20',
+    desc: 'Modelos ligeros y rápidos. Ideal para tareas sencillas.',
+  },
+  intermediate: {
+    label: 'Intermedio',
+    icon: <Cpu className="h-3.5 w-3.5" />,
+    color: 'text-blue-400 border-blue-900/50 bg-blue-950/20',
+    desc: 'Buen equilibrio entre velocidad y capacidad.',
+  },
+  advanced: {
+    label: 'Avanzado',
+    icon: <Sparkles className="h-3.5 w-3.5" />,
+    color: 'text-purple-400 border-purple-900/50 bg-purple-950/20',
+    desc: 'Modelos grandes y potentes. Mejores resultados, más lentos.',
+  },
+  unknown: {
+    label: 'Otro',
+    icon: <CircleDot className="h-3.5 w-3.5" />,
+    color: 'text-surface-400 border-surface-700/50 bg-surface-800/30',
+    desc: 'Modelo no categorizado.',
+  },
+};
+
+function formatSize(bytes: number): string {
+  if (bytes === 0) return '';
+  const gb = bytes / (1024 ** 3);
+  if (gb >= 1) return `${gb.toFixed(1)} GB`;
+  const mb = bytes / (1024 ** 2);
+  return `${mb.toFixed(0)} MB`;
+}
+
 function DeveloperTab() {
-  const [keys, setKeys] = useState<ApiKeyItem[]>([]);
-  const [newKeyName, setNewKeyName] = useState('');
-  const [newKeyValue, setNewKeyValue] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [fetched, setFetched] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [error, setError] = useState('');
+  const [models, setModels] = useState<OllamaModel[]>([]);
+  const [currentModel, setCurrentModel] = useState('');
+  const [temperature, setTemperature] = useState(0.7);
+  const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [ollamaOk, setOllamaOk] = useState(true);
 
-  const authHeaders = async () => {
-    const token = await getIdToken();
-    return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-  };
-
-  const fetchKeys = async () => {
-    try {
-      const headers = await authHeaders();
-      const res = await fetch(`${API_BASE}/api/v1/developer/keys`, { headers });
-      if (res.ok) {
-        const data = await res.json();
-        setKeys(data.keys || []);
-      }
-    } catch { /* ignore */ }
-    setFetched(true);
-  };
-
-  // Fetch keys on mount
-  if (!fetched) fetchKeys();
-
-  const generateKey = async () => {
+  const loadData = async () => {
     setLoading(true);
-    setError('');
-    setNewKeyValue('');
+    setMsg('');
     try {
-      const headers = await authHeaders();
-      const res = await fetch(`${API_BASE}/api/v1/developer/keys`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ key_name: newKeyName || 'Default' }),
-      });
-      if (!res.ok) throw new Error('Failed to generate key');
-      const data = await res.json();
-      setNewKeyValue(data.api_key);
-      setNewKeyName('');
-      fetchKeys();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error');
+      const [settingsData, ollamaModels] = await Promise.all([
+        getSettings(),
+        fetchOllamaModels().catch(() => {
+          setOllamaOk(false);
+          return [] as OllamaModel[];
+        }),
+      ]);
+      setCurrentModel(settingsData.model_name);
+      setTemperature(settingsData.temperature);
+      setOllamaUrl(settingsData.ollama_base_url);
+      setModels(ollamaModels);
+      if (ollamaModels.length > 0) setOllamaOk(true);
+    } catch {
+      setMsg('Error loading settings');
     } finally {
       setLoading(false);
     }
   };
 
-  const revokeKey = async (keyId: string) => {
+  useEffect(() => { loadData(); }, []);
+
+  const handleSelectModel = async (name: string) => {
+    setSaving(true);
+    setMsg('');
     try {
-      const headers = await authHeaders();
-      await fetch(`${API_BASE}/api/v1/developer/keys/${keyId}`, {
-        method: 'DELETE',
-        headers,
-      });
-      fetchKeys();
-    } catch { /* ignore */ }
+      await updateSettings({ model_name: name });
+      setCurrentModel(name);
+      setMsg('Modelo actualizado');
+    } catch {
+      setMsg('Error al cambiar modelo');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const copyKey = () => {
-    navigator.clipboard.writeText(newKeyValue);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleSaveTemp = async () => {
+    setSaving(true);
+    setMsg('');
+    try {
+      await updateSettings({ temperature });
+      setMsg('Temperatura actualizada');
+    } catch {
+      setMsg('Error al guardar temperatura');
+    } finally {
+      setSaving(false);
+    }
   };
+
+  // Group models by tier
+  const grouped: Record<string, OllamaModel[]> = {};
+  for (const m of models) {
+    const tier = m.tier || 'unknown';
+    if (!grouped[tier]) grouped[tier] = [];
+    grouped[tier].push(m);
+  }
+
+  const tierOrder = ['basic', 'intermediate', 'advanced', 'unknown'];
 
   return (
     <motion.div
@@ -455,112 +485,150 @@ function DeveloperTab() {
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -10 }}
     >
-      <div>
-        <h3 className="text-xs font-bold text-surface-200">API Keys</h3>
-        <p className="mt-1 text-[10px] text-surface-500">
-          Use API keys to connect NOVA's LLM from CLI, scripts, or external apps.
-          Keys grant full access to the chat API on your behalf.
-        </p>
-      </div>
-
-      {/* Generate new key */}
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={newKeyName}
-          onChange={(e) => setNewKeyName(e.target.value)}
-          placeholder="Key name (e.g. nova-cli)"
-          className="flex-1 rounded-lg border border-surface-700/50 bg-surface-800 px-3 py-2 text-xs text-surface-100 placeholder:text-surface-600 focus:border-primary-700/50 focus:outline-none"
-        />
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-xs font-bold text-surface-200">Ollama — Modelos locales</h3>
+          <p className="mt-1 text-[10px] text-surface-500">
+            Selecciona el modelo LLM que NOVA utilizará. Los modelos se ejecutan localmente con Ollama.
+          </p>
+        </div>
         <button
-          onClick={generateKey}
+          onClick={loadData}
           disabled={loading}
-          className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-xs font-bold text-surface-950 transition-all hover:bg-primary-500 disabled:opacity-50"
+          className="shrink-0 cursor-pointer rounded-lg p-2 text-surface-500 transition-colors hover:bg-surface-800 hover:text-surface-300"
+          title="Refrescar modelos"
         >
-          {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <><Plus className="h-3 w-3" /> Generate</>}
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
-      {error && <p className="text-xs text-red-400">{error}</p>}
-
-      {/* New key reveal (one-time) */}
-      {newKeyValue && (
-        <div className="rounded-xl border border-primary-900/50 bg-primary-950/20 p-4">
-          <p className="mb-2 text-[10px] font-semibold text-primary-400">
-            ⚠ Copy this key now — it won't be shown again
+      {/* Ollama status */}
+      {!ollamaOk && (
+        <div className="flex items-center gap-2 rounded-lg border border-red-900/50 bg-red-950/20 px-3 py-2.5">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-400" />
+          <p className="text-[10px] text-red-300">
+            No se pudo conectar con Ollama en <span className="font-mono">{ollamaUrl}</span>. Asegúrate de que está en ejecución.
           </p>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 overflow-x-auto rounded-lg bg-surface-800 px-3 py-2 text-xs text-primary-300 code-scroll">
-              {newKeyValue}
-            </code>
-            <button
-              onClick={copyKey}
-              className="shrink-0 cursor-pointer rounded-lg bg-surface-800 p-2 text-surface-400 hover:text-primary-400"
-            >
-              {copied ? <Check className="h-3.5 w-3.5 text-primary-400" /> : <Copy className="h-3.5 w-3.5" />}
-            </button>
-          </div>
         </div>
       )}
 
-      {/* Existing keys */}
-      <div className="space-y-2">
-        <h4 className="text-[10px] font-semibold uppercase tracking-widest text-surface-500">
-          active keys
-        </h4>
-        {keys.length === 0 ? (
-          <p className="py-3 text-center text-[10px] text-surface-600">No API keys yet</p>
-        ) : (
-          keys.map((k) => (
-            <div
-              key={k.api_key_id}
-              className="flex items-center gap-3 rounded-lg border border-surface-700/30 bg-surface-800/50 px-3 py-2.5"
-            >
-              <Key className="h-3.5 w-3.5 shrink-0 text-primary-600" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-medium text-surface-200">{k.key_name}</p>
-                <p className="text-[10px] text-surface-500">
-                  {k.api_key_masked} · {new Date(k.created_at * 1000).toLocaleDateString()}
-                </p>
-              </div>
-              <button
-                onClick={() => revokeKey(k.api_key_id)}
-                className="shrink-0 cursor-pointer rounded-lg p-1.5 text-surface-500 transition-colors hover:bg-red-950/30 hover:text-red-400"
-                title="Revoke key"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ))
-        )}
-      </div>
+      {loading ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-5 w-5 animate-spin text-primary-500" />
+        </div>
+      ) : (
+        <>
+          {/* Model tiers */}
+          {tierOrder.map((tier) => {
+            const tierModels = grouped[tier];
+            if (!tierModels || tierModels.length === 0) return null;
+            const meta = TIER_META[tier] || TIER_META.unknown;
 
-      {/* Usage docs */}
+            return (
+              <div key={tier}>
+                <div className={`mb-2 flex items-center gap-2 rounded-lg border px-3 py-2 ${meta.color}`}>
+                  {meta.icon}
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-widest">{meta.label}</span>
+                    <p className="text-[9px] opacity-70">{meta.desc}</p>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  {tierModels.map((m) => {
+                    const isActive = m.name === currentModel;
+                    return (
+                      <button
+                        key={m.name}
+                        onClick={() => handleSelectModel(m.name)}
+                        disabled={saving || isActive}
+                        className={`flex w-full cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all ${
+                          isActive
+                            ? 'border-primary-700/50 bg-primary-950/30 ring-1 ring-primary-800/30'
+                            : 'border-surface-700/30 bg-surface-800/50 hover:border-surface-600/50 hover:bg-surface-800'
+                        } disabled:cursor-default`}
+                      >
+                        <Server className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-primary-400' : 'text-surface-500'}`} />
+                        <div className="min-w-0 flex-1">
+                          <p className={`truncate text-xs font-medium ${isActive ? 'text-primary-300' : 'text-surface-200'}`}>
+                            {m.name}
+                          </p>
+                          {m.size > 0 && (
+                            <p className="text-[10px] text-surface-500">{formatSize(m.size)}</p>
+                          )}
+                        </div>
+                        {isActive && (
+                          <span className="shrink-0 rounded-full bg-primary-900/50 px-2 py-0.5 text-[9px] font-bold text-primary-400">
+                            ACTIVO
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+
+          {models.length === 0 && ollamaOk && (
+            <div className="rounded-lg border border-surface-700/30 bg-surface-800/30 py-6 text-center">
+              <Cpu className="mx-auto mb-2 h-6 w-6 text-surface-600" />
+              <p className="text-xs text-surface-500">No hay modelos descargados en Ollama.</p>
+              <p className="mt-1 text-[10px] text-surface-600">
+                Ejecuta <code className="rounded bg-surface-800 px-1 py-0.5 text-primary-400">ollama pull gemma3:4b</code> para empezar.
+              </p>
+            </div>
+          )}
+
+          {/* Temperature slider */}
+          <div className="rounded-xl border border-surface-700/30 bg-surface-800/30 p-4">
+            <label className="mb-2 block text-[10px] font-semibold uppercase tracking-widest text-surface-500">
+              temperatura: {temperature.toFixed(1)}
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="2"
+              step="0.1"
+              value={temperature}
+              onChange={(e) => setTemperature(parseFloat(e.target.value))}
+              className="w-full accent-primary-500"
+            />
+            <div className="mt-1 flex justify-between text-[9px] text-surface-600">
+              <span>Preciso (0.0)</span>
+              <span>Creativo (2.0)</span>
+            </div>
+            <button
+              onClick={handleSaveTemp}
+              disabled={saving}
+              className="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-surface-700 px-4 py-2 text-xs font-semibold text-surface-200 transition-colors hover:bg-surface-600 disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Guardar temperatura'}
+            </button>
+          </div>
+        </>
+      )}
+
+      {msg && (
+        <p className={`text-xs ${msg.includes('Error') ? 'text-red-400' : 'text-primary-400'}`}>
+          {msg}
+        </p>
+      )}
+
+      {/* Ollama info box */}
       <div className="rounded-xl border border-surface-700/30 bg-surface-800/30 p-4">
         <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-surface-500">
-          usage
+          información
         </h4>
         <div className="space-y-2 text-[10px] text-surface-400">
-          <p className="font-semibold text-surface-300">With nova CLI:</p>
+          <p>NOVA utiliza <span className="font-semibold text-surface-300">Ollama</span> para ejecutar modelos LLM de forma local, sin necesidad de API keys externas.</p>
+          <p className="font-semibold text-surface-300">Instalar un modelo:</p>
           <code className="block overflow-x-auto rounded-lg bg-surface-900 px-3 py-2 text-primary-400 code-scroll">
-            export NOVA_API_KEY=nova-sk-your-key-here{'\n'}
-            export NOVA_API_URL=http://localhost:8000{'\n'}
-            nova chat "Hello NOVA"
+            ollama pull gemma3:4b
           </code>
-          <p className="font-semibold text-surface-300">With curl:</p>
+          <p className="font-semibold text-surface-300">Servidor:</p>
           <code className="block overflow-x-auto rounded-lg bg-surface-900 px-3 py-2 text-primary-400 code-scroll">
-            curl -X POST http://localhost:8000/api/v1/chat \{'\n'}
-            {'  '}-H "Authorization: Bearer nova-sk-your-key" \{'\n'}
-            {'  '}-H "Content-Type: application/json" \{'\n'}
-            {'  '}-d '{`{"message": "Hello", "session_id": "test"}`}'
-          </code>
-          <p className="font-semibold text-surface-300">OpenAI-compatible (Python):</p>
-          <code className="block overflow-x-auto rounded-lg bg-surface-900 px-3 py-2 text-primary-400 code-scroll">
-            from openai import OpenAI{'\n'}
-            client = OpenAI({'\n'}
-            {'  '}api_key="nova-sk-your-key",{'\n'}
-            {'  '}base_url="http://localhost:8000/api/v1"{'\n'}
-            )
+            {ollamaUrl}
           </code>
         </div>
       </div>

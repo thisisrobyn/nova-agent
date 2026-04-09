@@ -6,20 +6,19 @@ import json
 import logging
 from typing import Any, Dict
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from agent.graph import compiled_graph, run_agent_once
-from agent.llm import get_settings, reinitialize_llm
+from agent.llm import get_settings, list_ollama_models, reinitialize_llm
 from api.schemas import (
     ChatMessage,
     ChatRequest,
     ChatResponse,
-    CreateApiKeyRequest,
-    ApiKeyResponse,
-    ApiKeyListResponse,
     HistoryResponse,
+    OllamaModel,
+    OllamaModelsResponse,
     SettingsResponse,
     SettingsUpdate,
     TitleRequest,
@@ -240,60 +239,20 @@ async def get_settings_endpoint() -> SettingsResponse:
 async def update_settings(body: SettingsUpdate) -> SettingsResponse:
     """Update LLM settings, reinitialize the model, and persist to .env."""
     ok = reinitialize_llm(
-        api_key=body.openai_api_key,
         model_name=body.model_name,
         temperature=body.temperature,
-        base_url=body.openai_api_base,
+        ollama_base_url=body.ollama_base_url,
     )
     if not ok:
         raise HTTPException(status_code=400, detail="Failed to apply settings")
     return SettingsResponse(**get_settings())
 
 
-# ── Developer / API Key endpoints ───────────────────────────────────
+# ── Ollama model listing ────────────────────────────────────────────
 
-@router.post("/developer/keys", response_model=ApiKeyResponse)
-async def create_api_key(
-    body: CreateApiKeyRequest,
-    request: Request,
-):
-    """Generate a new API key for the authenticated user."""
-    from api.auth import get_current_user
-    from api.db import create_api_key as db_create_key
-
-    user = await get_current_user(request)
-    result = await db_create_key(
-        user_id=user.sub,
-        user_email=user.email,
-        user_name=user.name,
-        key_name=body.key_name,
-    )
-    return ApiKeyResponse(
-        api_key=result["api_key"],
-        key_name=result["key_name"],
-        created_at=result["created_at"],
-    )
-
-
-@router.get("/developer/keys", response_model=ApiKeyListResponse)
-async def list_api_keys(request: Request):
-    """List all API keys for the authenticated user (masked)."""
-    from api.auth import get_current_user
-    from api.db import list_api_keys as db_list_keys
-
-    user = await get_current_user(request)
-    keys = await db_list_keys(user.sub)
-    return ApiKeyListResponse(keys=keys)
-
-
-@router.delete("/developer/keys/{key_id}")
-async def revoke_api_key(key_id: str, request: Request):
-    """Revoke an API key."""
-    from api.auth import get_current_user
-    from api.db import revoke_api_key as db_revoke_key
-
-    user = await get_current_user(request)
-    ok = await db_revoke_key(user.sub, key_id)
-    if not ok:
-        raise HTTPException(status_code=404, detail="API key not found")
-    return {"status": "revoked", "key_id": key_id}
+@router.get("/ollama/models", response_model=OllamaModelsResponse)
+async def get_ollama_models() -> OllamaModelsResponse:
+    """List locally available Ollama models with tier classification."""
+    models_raw = await list_ollama_models()
+    models = [OllamaModel(**m) for m in models_raw]
+    return OllamaModelsResponse(models=models)

@@ -37,11 +37,19 @@ export type Theme = 'light' | 'dark';
 /* ── Settings ─────────────────────────────────────────────── */
 
 export interface SettingsData {
-  openai_api_key_masked: string;
-  has_api_key: boolean;
   model_name: string;
   temperature: number;
-  available_models: string[];
+  ollama_base_url: string;
+  model_tiers: Record<string, string[]>;
+}
+
+/* ── Ollama models ────────────────────────────────────────── */
+
+export interface OllamaModel {
+  name: string;
+  size: number;
+  modified_at: string;
+  tier: string;
 }
 
 /* ── Stream events ────────────────────────────────────────── */
