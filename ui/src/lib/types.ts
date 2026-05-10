@@ -72,14 +72,21 @@ export interface StreamToolEndEvent {
 
 export interface StreamDoneEvent {
   type: 'done';
+  response: string;
   tools_used: ToolInfo[];
   token_usage: TokenUsage | null;
   total_tokens: number;
   iteration_count: number;
+  elapsed_seconds: number;
 }
 
 export interface StreamErrorEvent {
   type: 'error';
+  message: string;
+}
+
+export interface StreamStatusEvent {
+  type: 'status';
   message: string;
 }
 
@@ -88,4 +95,5 @@ export type StreamEvent =
   | StreamToolStartEvent
   | StreamToolEndEvent
   | StreamDoneEvent
-  | StreamErrorEvent;
+  | StreamErrorEvent
+  | StreamStatusEvent;

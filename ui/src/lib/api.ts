@@ -42,18 +42,23 @@ export async function sendMessageStream(
     onToolStart: (name: string) => void;
     onToolEnd: (tool: { name: string; result: string }) => void;
     onDone: (data: {
+      response: string;
       tools_used: ToolInfo[];
       token_usage: Record<string, unknown> | null;
       total_tokens: number;
       iteration_count: number;
+      elapsed_seconds: number;
     }) => void;
     onError: (message: string) => void;
+    onStatus?: (message: string) => void;
   },
+  signal?: AbortSignal,
 ): Promise<void> {
   const res = await fetch(`${API_BASE}/api/v1/chat/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, session_id: sessionId }),
+    signal,
   });
 
   if (!res.ok) {
@@ -93,6 +98,9 @@ export async function sendMessageStream(
             break;
           case 'error':
             callbacks.onError(event.message);
+            break;
+          case 'status':
+            callbacks.onStatus?.(event.message);
             break;
         }
       } catch {

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Pencil, Check, X } from 'lucide-react';
+import { Pencil, Check, X, Clock } from 'lucide-react';
 import { NovaSparkle } from '@/components/ui/NovaSparkle';
 import { MarkdownRenderer } from '@/components/ui/MarkdownRenderer';
 import { ToolBadge } from './ToolBadge';
@@ -13,6 +13,7 @@ interface ChatMessageProps {
   content: string;
   tools_used: { name: string; result: string }[];
   token_usage: TokenUsage | null;
+  elapsed_seconds?: number;
   isNew?: boolean;
   onEdit?: (id: string, newContent: string) => void;
 }
@@ -23,6 +24,7 @@ export function ChatMessage({
   content,
   tools_used,
   token_usage,
+  elapsed_seconds,
   isNew = false,
   onEdit,
 }: ChatMessageProps) {
@@ -145,13 +147,23 @@ export function ChatMessage({
           </button>
         )}
 
-        {/* Token counter for assistant */}
-        {!isUser && token_usage && (
-          <TokenCounter
-            inputTokens={token_usage.input_tokens}
-            outputTokens={token_usage.output_tokens}
-            totalTokens={token_usage.total_tokens}
-          />
+        {/* Token counter & response time for assistant */}
+        {!isUser && (token_usage || elapsed_seconds) && (
+          <div className="flex items-center gap-3">
+            {token_usage && (
+              <TokenCounter
+                inputTokens={token_usage.input_tokens}
+                outputTokens={token_usage.output_tokens}
+                totalTokens={token_usage.total_tokens}
+              />
+            )}
+            {elapsed_seconds != null && (
+              <span className="flex items-center gap-1 text-[10px] text-surface-500">
+                <Clock className="h-2.5 w-2.5" />
+                {elapsed_seconds}s
+              </span>
+            )}
+          </div>
         )}
       </div>
     </motion.div>

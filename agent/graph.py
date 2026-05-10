@@ -48,6 +48,7 @@ def get_tools() -> List[BaseTool]:
     from tools.calculator import calculator
     from tools.datetime_tool import convert_timezone, get_current_datetime
     from tools.files import list_directory, read_csv, read_excel, read_text_file
+    from tools.conversation_tokens import count_conversation_tokens
 
     local: List[BaseTool] = [
         get_current_datetime,
@@ -57,6 +58,7 @@ def get_tools() -> List[BaseTool]:
         read_csv,
         read_excel,
         read_text_file,
+        count_conversation_tokens,
     ]
     return local + _mcp_tools
 

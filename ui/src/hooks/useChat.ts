@@ -15,6 +15,7 @@ export interface DisplayMessage {
   tools_used: { name: string; result: string }[];
   token_usage: TokenUsage | null;
   timestamp: number;
+  elapsed_seconds?: number;
 }
 
 function buildMessageWithFiles(text: string, files?: AttachedFile[]): string {
@@ -36,34 +37,83 @@ export function useChat(sessionId: string) {
   const [iterationCount, setIterationCount] = useState(0);
   const [streamingContent, setStreamingContent] = useState('');
   const [streamingTools, setStreamingTools] = useState<ToolInfo[]>([]);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [historyUnavailable, setHistoryUnavailable] = useState(false);
   const idCounter = useRef(0);
   const streamRef = useRef('');
   const lastUserContentRef = useRef('');
+  const modelLoadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasReceivedTokenRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const pendingQueueRef = useRef<string[]>([]);
+  const loadHistoryVersionRef = useRef(0);
+
+  // Abort in-flight stream when session changes or on unmount
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+      if (modelLoadingTimerRef.current) {
+        clearTimeout(modelLoadingTimerRef.current);
+        modelLoadingTimerRef.current = null;
+      }
+    };
+  }, [sessionId]);
 
   // Reset state when session changes
   useEffect(() => {
     setMessages([]);
+    setIsLoading(false);
     setTotalTokens(0);
     setIterationCount(0);
     setError(null);
     setStreamingContent('');
     setStreamingTools([]);
+    setStatusMessage(null);
+    setHistoryUnavailable(false);
+    pendingQueueRef.current = [];
+    loadHistoryVersionRef.current++;
+    if (modelLoadingTimerRef.current) {
+      clearTimeout(modelLoadingTimerRef.current);
+      modelLoadingTimerRef.current = null;
+    }
   }, [sessionId]);
 
   const nextId = () => `msg-${++idCounter.current}-${Date.now()}`;
 
   const sendRaw = useCallback(
     async (content: string) => {
+      // Abort any in-flight stream before starting a new one
+      abortControllerRef.current?.abort();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
       setIsLoading(true);
       setError(null);
       setStreamingContent('');
       setStreamingTools([]);
+      setStatusMessage(null);
       streamRef.current = '';
       lastUserContentRef.current = content;
+      hasReceivedTokenRef.current = false;
+
+      // 5-second timer: if no tokens arrive, show model-loading hint
+      modelLoadingTimerRef.current = setTimeout(() => {
+        if (!hasReceivedTokenRef.current) {
+          setStatusMessage('Loading model...');
+        }
+      }, 5000);
 
       try {
         await sendMessageStream(sessionId, content, {
           onToken: (token) => {
+            hasReceivedTokenRef.current = true;
+            if (modelLoadingTimerRef.current) {
+              clearTimeout(modelLoadingTimerRef.current);
+              modelLoadingTimerRef.current = null;
+            }
+            setStatusMessage(null);
             streamRef.current += token;
             setStreamingContent(streamRef.current);
           },
@@ -80,13 +130,16 @@ export function useChat(sessionId: string) {
             );
           },
           onDone: (data) => {
+            const content = streamRef.current || data.response || '';
+
             const assistantMsg: DisplayMessage = {
               id: nextId(),
               role: 'assistant',
-              content: streamRef.current,
+              content,
               tools_used: data.tools_used ?? [],
               token_usage: data.token_usage as TokenUsage | null,
               timestamp: Date.now(),
+              elapsed_seconds: data.elapsed_seconds,
             };
 
             setMessages((prev) => [...prev, assistantMsg]);
@@ -94,15 +147,35 @@ export function useChat(sessionId: string) {
             setIterationCount(data.iteration_count);
             setStreamingContent('');
             setStreamingTools([]);
+            setStatusMessage(null);
           },
           onError: (msg) => {
             setError(msg);
+            setStatusMessage(null);
           },
-        });
+          onStatus: (msg) => {
+            setStatusMessage(msg);
+          },
+        }, controller.signal);
       } catch (e) {
+        if (e instanceof DOMException && e.name === 'AbortError') return;
         setError(e instanceof Error ? e.message : 'Unknown error');
       } finally {
-        setIsLoading(false);
+        if (modelLoadingTimerRef.current) {
+          clearTimeout(modelLoadingTimerRef.current);
+          modelLoadingTimerRef.current = null;
+        }
+        setStatusMessage(null);
+
+        // Process next queued message if any
+        const nextMessage = pendingQueueRef.current.shift();
+        if (nextMessage) {
+          // Keep isLoading true — immediately process next in queue
+          streamRef.current = '';
+          sendRaw(nextMessage);
+        } else {
+          setIsLoading(false);
+        }
       }
     },
     [sessionId],
@@ -110,8 +183,7 @@ export function useChat(sessionId: string) {
 
   const send = useCallback(
     async (content: string, files?: AttachedFile[]) => {
-      if ((!content.trim() && (!files || files.length === 0)) || isLoading)
-        return;
+      if (!content.trim() && (!files || files.length === 0)) return;
 
       const displayContent =
         files && files.length > 0
@@ -129,6 +201,13 @@ export function useChat(sessionId: string) {
 
       setMessages((prev) => [...prev, userMsg]);
       const fullMessage = buildMessageWithFiles(content, files);
+
+      if (isLoading) {
+        // Queue the message — it will be sent when the current stream finishes
+        pendingQueueRef.current.push(fullMessage);
+        return;
+      }
+
       await sendRaw(fullMessage);
     },
     [sendRaw, isLoading],
@@ -147,22 +226,25 @@ export function useChat(sessionId: string) {
       setMessages((prev) => {
         const idx = prev.findIndex((m) => m.id === messageId);
         if (idx === -1) return prev;
-        // Keep messages up to and including the edited one, discard the rest
         const updated = prev.slice(0, idx);
         updated.push({ ...prev[idx], content: newContent });
         return updated;
       });
 
-      // Small delay to let state settle, then resend
       await new Promise((r) => setTimeout(r, 50));
       await sendRaw(newContent);
     },
     [sendRaw, isLoading],
   );
 
-  const loadHistory = useCallback(async () => {
+  const loadHistory = useCallback(async (): Promise<'loaded' | 'empty' | 'error'> => {
+    const version = ++loadHistoryVersionRef.current;
+    setIsLoadingHistory(true);
+    setHistoryUnavailable(false);
     try {
       const data = await getHistory(sessionId);
+      // Guard against stale responses from a previous session
+      if (loadHistoryVersionRef.current !== version) return 'error';
       const mapped: DisplayMessage[] = data.messages
         .filter((m: ChatMessage) => m.role !== 'tool')
         .map((m: ChatMessage) => ({
@@ -176,8 +258,17 @@ export function useChat(sessionId: string) {
       setMessages(mapped);
       setTotalTokens(data.total_tokens);
       setIterationCount(data.iteration_count);
+      if (mapped.length === 0) setHistoryUnavailable(true);
+      return mapped.length > 0 ? 'loaded' : 'empty';
     } catch {
-      // Session may not exist yet
+      if (loadHistoryVersionRef.current !== version) return 'error';
+      setHistoryUnavailable(true);
+      // Network error or backend unreachable — don't prune sidebar entry
+      return 'error';
+    } finally {
+      if (loadHistoryVersionRef.current === version) {
+        setIsLoadingHistory(false);
+      }
     }
   }, [sessionId]);
 
@@ -192,11 +283,14 @@ export function useChat(sessionId: string) {
   return {
     messages,
     isLoading,
+    isLoadingHistory,
+    historyUnavailable,
     error,
     totalTokens,
     iterationCount,
     streamingContent,
     streamingTools,
+    statusMessage,
     send,
     retry,
     editMessage,

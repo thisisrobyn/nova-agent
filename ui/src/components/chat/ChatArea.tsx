@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, type DragEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Upload, RotateCcw, LogIn } from 'lucide-react';
+import { Upload, RotateCcw, LogIn, DatabaseZap } from 'lucide-react';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { WelcomeScreen } from './WelcomeScreen';
@@ -18,14 +18,18 @@ interface Message {
   content: string;
   tools_used: { name: string; result: string }[];
   token_usage: Record<string, unknown> | null;
+  elapsed_seconds?: number;
 }
 
 interface ChatAreaProps {
   messages: Message[];
   isLoading: boolean;
+  isLoadingHistory?: boolean;
+  historyUnavailable?: boolean;
   error: string | null;
   streamingContent: string;
   streamingTools: ToolInfo[];
+  statusMessage: string | null;
   onSend: (message: string, files?: FileReadResult[]) => void;
   onRetry: () => void;
   onEditMessage: (id: string, newContent: string) => void;
@@ -39,9 +43,12 @@ interface ChatAreaProps {
 export function ChatArea({
   messages,
   isLoading,
+  isLoadingHistory = false,
+  historyUnavailable = false,
   error,
   streamingContent,
   streamingTools,
+  statusMessage,
   onSend,
   onRetry,
   onEditMessage,
@@ -170,7 +177,62 @@ export function ChatArea({
         )}
       </AnimatePresence>
 
-      {isEmpty && !isLoading ? (
+      {isLoadingHistory ? (
+        /* Loading history animation */
+        <div className="flex h-full flex-col items-center justify-center">
+          <motion.div
+            className="flex flex-col items-center gap-4"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.2 }}
+          >
+            <NovaSparkle className="h-8 w-8 text-primary-500" thinking />
+            <div className="flex items-center gap-1.5">
+              {[0, 1, 2].map((i) => (
+                <motion.span
+                  key={i}
+                  className="h-1.5 w-1.5 rounded-full bg-primary-500"
+                  animate={{ opacity: [0.3, 1, 0.3] }}
+                  transition={{
+                    duration: 1,
+                    repeat: Infinity,
+                    delay: i * 0.2,
+                    ease: 'easeInOut',
+                  }}
+                />
+              ))}
+            </div>
+          </motion.div>
+        </div>
+      ) : historyUnavailable && isEmpty && !isLoading ? (
+        /* Session data unavailable */
+        <div className="flex h-full flex-col items-center justify-center px-4 pb-6">
+          <motion.div
+            className="flex flex-col items-center gap-4 rounded-xl border border-surface-700/30 bg-surface-900/50 px-8 py-8"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <DatabaseZap className="h-8 w-8 text-surface-500" />
+            <div className="text-center">
+              <p className="text-sm font-medium text-surface-300">
+                Session data unavailable
+              </p>
+              <p className="mt-1.5 max-w-xs text-xs text-surface-500">
+                The message history for this conversation could not be recovered. You can start a new message or create a new session.
+              </p>
+            </div>
+          </motion.div>
+          <div className="mt-8 w-full max-w-3xl">
+            <ChatInput
+              onSend={onSend}
+              isLoading={isLoading}
+              externalFiles={droppedFiles}
+              onExternalFilesConsumed={handleDroppedFilesConsumed}
+              disabled={guestLimitReached}
+            />
+          </div>
+        </div>
+      ) : isEmpty && !isLoading ? (
         /* Welcome layout: title + input centered */
         <div className="flex h-full flex-col items-center justify-center px-4 pb-6">
           <div className="mb-8 -mt-16">
@@ -215,6 +277,7 @@ export function ChatArea({
                     content={msg.content}
                     tools_used={msg.tools_used}
                     token_usage={msg.token_usage}
+                    elapsed_seconds={msg.elapsed_seconds}
                     isNew={idx >= messages.length - 2}
                     onEdit={msg.role === 'user' && !isLoading ? onEditMessage : undefined}
                   />
@@ -239,6 +302,15 @@ export function ChatArea({
                       <div className="text-surface-200">
                         <MarkdownRenderer content={streamingContent} />
                         <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-primary-500/70" />
+                      </div>
+                    ) : statusMessage ? (
+                      <div className="flex items-center gap-2">
+                        <motion.span
+                          className="h-1.5 w-1.5 rounded-full bg-primary-500"
+                          animate={{ opacity: [0.3, 1, 0.3] }}
+                          transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
+                        />
+                        <span className="text-xs text-surface-400">{statusMessage}</span>
                       </div>
                     ) : (
                       <div className="flex items-center gap-1.5">

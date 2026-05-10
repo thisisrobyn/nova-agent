@@ -20,4 +20,12 @@ data/
 
 # OS
 .DS_Store
-Thumbs.dbui-screenshot-local.png
+Thumbs.db
+ui-screenshot-local.png
+
+# OpenCode and Speckit
+.opencode/
+.specify/
+# Ignore specs directory. If it's already tracked, run: git rm -r --cached specs
+specs/
+AGENTS.md

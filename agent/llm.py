@@ -56,19 +56,36 @@ _MODEL_TO_TIER: dict[str, str] = {
 OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 MODEL_NAME: str = os.getenv("NOVA_MODEL_NAME", "gemma3:4b")
 TEMPERATURE: float = float(os.getenv("NOVA_TEMPERATURE", "0.7"))
+KEEP_ALIVE: int = int(os.getenv("NOVA_KEEP_ALIVE", "-1"))
+NUM_CTX: int | None = int(os.getenv("NOVA_NUM_CTX")) if os.getenv("NOVA_NUM_CTX") else None
+LLM_TIMEOUT: float = float(os.getenv("NOVA_LLM_TIMEOUT", "120"))
 
 llm: ChatOllama | None = None
 
+
+def _build_ollama_kwargs() -> dict:
+    """Build kwargs dict for ChatOllama, including optional parameters."""
+    kwargs: dict = {
+        "model": MODEL_NAME,
+        "temperature": TEMPERATURE,
+        "base_url": OLLAMA_BASE_URL,
+        "keep_alive": KEEP_ALIVE,
+        "client_kwargs": {"timeout": httpx.Timeout(LLM_TIMEOUT)},
+        "async_client_kwargs": {"timeout": httpx.Timeout(LLM_TIMEOUT)},
+    }
+    if NUM_CTX is not None:
+        kwargs["num_ctx"] = NUM_CTX
+    return kwargs
+
+
 try:
-    llm = ChatOllama(
-        model=MODEL_NAME,
-        temperature=TEMPERATURE,
-        base_url=OLLAMA_BASE_URL,
-    )
+    llm = ChatOllama(**_build_ollama_kwargs())
     logger.info(
-        "ChatOllama initialised – model=%s base_url=%s",
+        "ChatOllama initialised – model=%s base_url=%s keep_alive=%s timeout=%s",
         MODEL_NAME,
         OLLAMA_BASE_URL,
+        KEEP_ALIVE,
+        LLM_TIMEOUT,
     )
 except Exception as e:
     logger.error("Failed to initialise ChatOllama: %s", e)
@@ -142,11 +159,7 @@ def reinitialize_llm(
         _update_env_file("OLLAMA_BASE_URL", ollama_base_url)
 
     try:
-        llm = ChatOllama(
-            model=MODEL_NAME,
-            temperature=TEMPERATURE,
-            base_url=OLLAMA_BASE_URL,
-        )
+        llm = ChatOllama(**_build_ollama_kwargs())
         logger.info(
             "LLM reinitialised – model=%s base_url=%s temp=%.2f",
             MODEL_NAME,

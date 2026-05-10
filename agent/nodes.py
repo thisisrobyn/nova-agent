@@ -9,6 +9,7 @@ import os
 from typing import Any, Dict, Literal
 
 from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 
 from agent.llm import get_llm
 from agent.state import NOVAState
@@ -28,11 +29,16 @@ SYSTEM_PROMPT = (
 )
 
 
-async def agent_node(state: NOVAState) -> Dict[str, Any]:
+async def agent_node(state: NOVAState, config: RunnableConfig) -> Dict[str, Any]:
     """Invoke the LLM with the full message history and bound tools.
 
     The LLM decides whether to call a tool or respond directly.
     Token usage is extracted and accumulated in the state.
+
+    The ``config`` parameter is injected by LangGraph and carries
+    callback handlers (e.g. ``_TokenStreamHandler`` for real-time
+    token streaming) that must be forwarded to the LLM ``ainvoke``
+    call so that ``on_llm_new_token`` fires for every chunk.
     """
     llm = get_llm()
     if llm is None:
@@ -50,7 +56,9 @@ async def agent_node(state: NOVAState) -> Dict[str, Any]:
     cwd = os.getcwd()
     sys_msg = SystemMessage(content=SYSTEM_PROMPT.format(cwd=cwd))
 
-    response: AIMessage = await llm_with_tools.ainvoke([sys_msg] + messages)
+    response: AIMessage = await llm_with_tools.ainvoke(
+        [sys_msg] + messages, config=config
+    )
 
     # Extract token usage
     token_usage = None
