@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.4.0](https://github.com/thisisrober/nova-agent/compare/v0.3.0...v0.4.0) (2026-05-10)
+
+
+### Features
+
+* add roadmap deps, structlog logging, correlation ID middleware, memory models and DB init (Phase 1-2) ([492f6bd](https://github.com/thisisrober/nova-agent/commit/492f6bdd562a13112a9a004ca456e0ab3d02f5c0))
+* added landing page ([72812eb](https://github.com/thisisrober/nova-agent/commit/72812eb27257b2b6f9514d0f218b343f520f9457))
+* **US1:** conversational memory - fact extraction, episodic memory, memory context injection, API routes and UI ([14cbfc0](https://github.com/thisisrober/nova-agent/commit/14cbfc08d95fbe1799a69d9c957d4e0f7f36d070))
+* **US2:** RAG knowledge base - ChromaDB vector store, document ingestion, rag_search tool, API routes and UI ([95cb031](https://github.com/thisisrober/nova-agent/commit/95cb031baf3d245661c51a4cf0661af3ff16ac8c))
+* **US3:** web search tool with Tavily primary and DuckDuckGo fallback ([9aa292e](https://github.com/thisisrober/nova-agent/commit/9aa292e05fa5f4ccd73b811b5fe23b9052bea4fa))
+* **US4:** sandboxed Python code execution tool + register web_search and execute_python in agent graph ([e1d6a12](https://github.com/thisisrober/nova-agent/commit/e1d6a120a236d91efae9bcbba1dd5905455f72be))
+* **US5:** scheduled tasks - APScheduler manager, CRUD API, execution logs, enhanced health endpoint, and scheduler UI ([795687f](https://github.com/thisisrober/nova-agent/commit/795687fd94840f0b5f5011e7778b1a079214b092))
+* **US6:** intuitive scheduler form + comprehensive documentation for all capabilities ([96893b3](https://github.com/thisisrober/nova-agent/commit/96893b37093a74ed4f450e42978a313a9c2a5c70))
+
+
+### Bug Fixes
+
+* add error handling to API endpoints and migrate routes to structlog ([076808c](https://github.com/thisisrober/nova-agent/commit/076808ce13119c19dae53bebccf096f7fd9647d5))
+
 ## [0.3.0](https://github.com/thisisrober/nova-agent/compare/v0.2.0...v0.3.0) (2026-05-10)
 
 
