@@ -1005,7 +1005,7 @@ export function DocsPage() {
             className="flex cursor-pointer items-center gap-2 text-surface-300 transition-colors hover:text-primary-400"
           >
             <ArrowLeft className="h-4 w-4" />
-            <img src="/ai-bot.png" alt="NOVA" className="h-5 w-5" />
+            <img src={`${import.meta.env.BASE_URL}ai-bot.png`} alt="NOVA" className="h-5 w-5" />
             <span className="text-sm font-bold text-primary-400 tracking-wider">NOVA</span>
           </button>
           <button

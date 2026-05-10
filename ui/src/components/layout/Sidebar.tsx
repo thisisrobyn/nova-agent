@@ -490,9 +490,11 @@ export function Sidebar({
         <Button variant="ghost" size="sm" className="w-full justify-start gap-1.5 text-surface-400" onClick={onOpenKnowledge}>
           <BookOpen className="h-3.5 w-3.5 text-primary-500" /> knowledge_base
         </Button>
-        <Button variant="ghost" size="sm" className="w-full justify-start gap-1.5 text-surface-400" onClick={onOpenScheduler}>
-          <Clock className="h-3.5 w-3.5 text-primary-500" /> scheduler
-        </Button>
+        {!import.meta.env.PROD && (
+          <Button variant="ghost" size="sm" className="w-full justify-start gap-1.5 text-surface-400" onClick={onOpenScheduler}>
+            <Clock className="h-3.5 w-3.5 text-primary-500" /> scheduler
+          </Button>
+        )}
       </div>
 
       {/* Chat history with folders */}

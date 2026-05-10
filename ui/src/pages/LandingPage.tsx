@@ -586,7 +586,7 @@ export function LandingPage() {
       <nav className="fixed top-0 z-50 w-full border-b border-surface-700/30 bg-surface-950/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
-            <img src="/ai-bot.png" alt="NOVA" className="h-7 w-7" />
+            <img src={`${import.meta.env.BASE_URL}ai-bot.png`} alt="NOVA" className="h-7 w-7" />
             <span className="text-lg font-bold text-primary-400 text-glow tracking-wider">
               NOVA
             </span>
@@ -1057,7 +1057,7 @@ export function LandingPage() {
         <div className="mx-auto max-w-6xl px-6">
           <div className="flex flex-col items-center justify-between gap-6 md:flex-row">
             <div className="flex items-center gap-3">
-              <img src="/ai-bot.png" alt="NOVA" className="h-6 w-6 opacity-50" />
+              <img src={`${import.meta.env.BASE_URL}ai-bot.png`} alt="NOVA" className="h-6 w-6 opacity-50" />
               <span className="text-sm text-surface-500">
                 NOVA — Neural Orchestration & Virtual Agent
               </span>

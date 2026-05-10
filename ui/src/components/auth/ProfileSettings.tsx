@@ -10,6 +10,10 @@ import type { OllamaModel } from '@/lib/types';
 
 type Tab = 'profile' | 'security' | 'developer';
 
+const TABS: Tab[] = import.meta.env.PROD
+  ? ['profile', 'security']
+  : ['profile', 'security', 'developer'];
+
 interface ProfileSettingsProps {
   user: AuthUser;
   onClose: () => void;
@@ -56,7 +60,7 @@ export function ProfileSettings({
 
         {/* Tabs */}
         <div className="flex border-b border-surface-700/50 px-6">
-          {(['profile', 'security', 'developer'] as Tab[]).map((t) => (
+          {TABS.map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
