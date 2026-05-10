@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File, Query
 from fastapi.responses import StreamingResponse
 from langchain_core.callbacks import AsyncCallbackHandler
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -21,7 +21,15 @@ from api.schemas import (
     ChatMessage,
     ChatRequest,
     ChatResponse,
+    DocumentDeleteResponse,
+    DocumentListResponse,
+    DocumentResponse,
+    EpisodeListResponse,
+    EpisodeResponse,
+    FactListResponse,
+    FactResponse,
     HistoryResponse,
+    MemoryClearResponse,
     OllamaModel,
     OllamaModelsResponse,
     SettingsResponse,
@@ -200,6 +208,12 @@ async def chat(request: ChatRequest) -> ChatResponse:
         updated_state = await run_agent_once(request.message, state)
         _sessions[request.session_id] = updated_state
         _persist_session(request.session_id, updated_state)
+
+        # Fire-and-forget memory extraction
+        asyncio.create_task(
+            _trigger_memory_extraction(request.session_id, updated_state)
+        )
+
         return _extract_response(updated_state)
     except Exception as e:
         logger.exception("Chat endpoint error")
@@ -361,6 +375,11 @@ async def _run_langgraph_task(
                 "is_generating": False,
             }
             _persist_session(session_id, _sessions[session_id])
+
+            # Fire-and-forget memory extraction
+            asyncio.create_task(
+                _trigger_memory_extraction(session_id, final_state)
+            )
         else:
             session = _sessions.get(session_id)
             if session:
@@ -499,3 +518,257 @@ async def get_ollama_models() -> OllamaModelsResponse:
     models_raw = await list_ollama_models()
     models = [OllamaModel(**m) for m in models_raw]
     return OllamaModelsResponse(models=models)
+
+
+# ── Memory extraction helper ───────────────────────────────────────
+
+_MIN_MESSAGES_FOR_EXTRACTION = 4
+
+
+async def _trigger_memory_extraction(session_id: str, state: Dict[str, Any]) -> None:
+    """Extract facts and summarize the conversation for long-term memory.
+
+    Called as a fire-and-forget task after a chat response completes.
+    Only runs when the session has >= ``_MIN_MESSAGES_FOR_EXTRACTION``
+    user+assistant messages.
+    """
+    try:
+        from memory import get_memory_manager
+
+        messages = state.get("messages", [])
+        # Count only user/assistant messages
+        meaningful = [
+            m for m in messages
+            if isinstance(m, (HumanMessage, AIMessage)) and getattr(m, "content", "")
+        ]
+        if len(meaningful) < _MIN_MESSAGES_FOR_EXTRACTION:
+            return
+
+        mm = get_memory_manager()
+
+        # Build simple dicts for the LLM prompts
+        msg_dicts = []
+        for m in meaningful:
+            role = "user" if isinstance(m, HumanMessage) else "assistant"
+            msg_dicts.append({"role": role, "content": m.content})
+
+        # Extract and save facts
+        facts = await mm.extract_facts_from_conversation(msg_dicts)
+        if facts:
+            await mm.save_facts(facts, source_session=session_id)
+
+        # Summarize episode
+        episode_data = await mm.summarize_episode(msg_dicts, session_id)
+        if episode_data:
+            await mm.episodic.save_episode(
+                session_id=session_id,
+                summary=episode_data.get("summary", ""),
+                key_topics=episode_data.get("key_topics", []),
+                message_count=len(meaningful),
+            )
+    except Exception:
+        logger.exception("Memory extraction failed for session %s", session_id)
+
+
+# ── Memory API routes ──────────────────────────────────────────────
+
+@router.get("/memory/facts", response_model=FactListResponse)
+async def get_memory_facts() -> FactListResponse:
+    """List all stored memory facts."""
+    from memory import get_memory_manager
+
+    mm = get_memory_manager()
+    facts = await mm.get_all_facts()
+    return FactListResponse(
+        facts=[
+            FactResponse(
+                id=f.id,
+                key=f.key,
+                value=f.value,
+                source_session=f.source_session,
+                confidence=f.confidence,
+                updated_at=f.updated_at.isoformat() if f.updated_at else None,
+            )
+            for f in facts
+        ],
+        count=len(facts),
+    )
+
+
+@router.delete("/memory/facts", response_model=MemoryClearResponse)
+async def clear_memory_facts() -> MemoryClearResponse:
+    """Delete all stored memory facts."""
+    from memory import get_memory_manager
+
+    mm = get_memory_manager()
+    count = await mm.delete_all_facts()
+    return MemoryClearResponse(deleted_count=count, message=f"Deleted {count} facts")
+
+
+@router.get("/memory/episodes", response_model=EpisodeListResponse)
+async def get_memory_episodes(limit: int = 50, offset: int = 0) -> EpisodeListResponse:
+    """List episodic memory records with pagination."""
+    from memory import get_memory_manager
+
+    mm = get_memory_manager()
+    episodes = await mm.episodic.get_all_episodes(limit=limit, offset=offset)
+    total = await mm.episodic.count_episodes()
+    return EpisodeListResponse(
+        episodes=[
+            EpisodeResponse(
+                id=e.id,
+                session_id=e.session_id,
+                summary=e.summary,
+                key_topics=e.key_topics,
+                message_count=e.message_count,
+                created_at=e.created_at.isoformat() if e.created_at else None,
+            )
+            for e in episodes
+        ],
+        count=total,
+    )
+
+
+@router.delete("/memory/episodes", response_model=MemoryClearResponse)
+async def clear_memory_episodes() -> MemoryClearResponse:
+    """Delete all episodic memory records."""
+    from memory import get_memory_manager
+
+    mm = get_memory_manager()
+    count = await mm.episodic.delete_all_episodes()
+    return MemoryClearResponse(
+        deleted_count=count, message=f"Deleted {count} episodes"
+    )
+
+
+# ── Document API routes (RAG Knowledge Base) ───────────────────────
+
+_ALLOWED_FILE_TYPES = {"pdf", "txt", "md"}
+_MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
+
+
+@router.post("/documents/upload", response_model=DocumentResponse)
+async def upload_document(file: UploadFile = File(...)) -> DocumentResponse:
+    """Upload a document to the knowledge base for RAG ingestion."""
+    import tempfile
+
+    from memory.rag.store import ChromaVectorStore
+    from memory.rag.ingestion import DocumentIngestionPipeline
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    if ext not in _ALLOWED_FILE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '{ext}'. Allowed: {', '.join(_ALLOWED_FILE_TYPES)}",
+        )
+
+    # Read file content to check size
+    content = await file.read()
+    if len(content) > _MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File too large ({len(content)} bytes). Max: {_MAX_FILE_SIZE} bytes (50MB)",
+        )
+
+    # Save to temp file for ingestion
+    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        store = ChromaVectorStore()
+        pipeline = DocumentIngestionPipeline(store)
+        doc = await pipeline.ingest(
+            file_path=tmp_path,
+            original_name=file.filename,
+            file_type=ext,
+            file_size=len(content),
+        )
+
+        if doc.status == "error":
+            raise HTTPException(
+                status_code=500,
+                detail=f"Ingestion failed: {doc.error_message}",
+            )
+
+        return DocumentResponse(
+            id=doc.id,
+            name=doc.name,
+            file_type=doc.file_type,
+            size_bytes=doc.size_bytes,
+            chunk_count=doc.chunk_count,
+            status=doc.status,
+            error_message=doc.error_message,
+            created_at=doc.created_at.isoformat() if doc.created_at else None,
+            updated_at=doc.updated_at.isoformat() if doc.updated_at else None,
+        )
+    finally:
+        import os
+        os.unlink(tmp_path)
+
+
+@router.get("/documents", response_model=DocumentListResponse)
+async def list_documents(status: str | None = Query(None)) -> DocumentListResponse:
+    """List all documents in the knowledge base."""
+    from memory.rag.ingestion import get_documents
+
+    docs = await get_documents(status=status)
+    return DocumentListResponse(
+        documents=[
+            DocumentResponse(
+                id=d.id,
+                name=d.name,
+                file_type=d.file_type,
+                size_bytes=d.size_bytes,
+                chunk_count=d.chunk_count,
+                status=d.status,
+                error_message=d.error_message,
+                created_at=d.created_at.isoformat() if d.created_at else None,
+                updated_at=d.updated_at.isoformat() if d.updated_at else None,
+            )
+            for d in docs
+        ],
+        count=len(docs),
+    )
+
+
+@router.get("/documents/{document_id}", response_model=DocumentResponse)
+async def get_document_endpoint(document_id: str) -> DocumentResponse:
+    """Get a single document by ID."""
+    from memory.rag.ingestion import get_document
+
+    doc = await get_document(document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    return DocumentResponse(
+        id=doc.id,
+        name=doc.name,
+        file_type=doc.file_type,
+        size_bytes=doc.size_bytes,
+        chunk_count=doc.chunk_count,
+        status=doc.status,
+        error_message=doc.error_message,
+        created_at=doc.created_at.isoformat() if doc.created_at else None,
+        updated_at=doc.updated_at.isoformat() if doc.updated_at else None,
+    )
+
+
+@router.delete("/documents/{document_id}", response_model=DocumentDeleteResponse)
+async def delete_document_endpoint(document_id: str) -> DocumentDeleteResponse:
+    """Delete a document and its chunks from the knowledge base."""
+    from memory.rag.store import ChromaVectorStore
+    from memory.rag.ingestion import delete_document
+
+    store = ChromaVectorStore()
+    deleted = await delete_document(document_id, store)
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    return DocumentDeleteResponse(
+        deleted=True, message=f"Document {document_id} deleted successfully"
+    )

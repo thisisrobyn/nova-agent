@@ -51,10 +51,24 @@ async def agent_node(state: NOVAState, config: RunnableConfig) -> Dict[str, Any]
     tools = get_tools()
     llm_with_tools = llm.bind_tools(tools) if tools else llm
 
-    # Build messages: system prompt + conversation history
+    # Build messages: system prompt + memory context + conversation history
     messages = list(state.get("messages", []))
     cwd = os.getcwd()
-    sys_msg = SystemMessage(content=SYSTEM_PROMPT.format(cwd=cwd))
+
+    # Inject memory context if available
+    memory_block = state.get("memory_context", "")
+    if not memory_block:
+        try:
+            from memory import get_memory_manager
+            memory_block = await get_memory_manager().build_memory_context()
+        except Exception:
+            memory_block = ""
+
+    system_content = SYSTEM_PROMPT.format(cwd=cwd)
+    if memory_block:
+        system_content += "\n" + memory_block
+
+    sys_msg = SystemMessage(content=system_content)
 
     response: AIMessage = await llm_with_tools.ainvoke(
         [sys_msg] + messages, config=config
@@ -87,6 +101,7 @@ async def agent_node(state: NOVAState, config: RunnableConfig) -> Dict[str, Any]
 
     return {
         "messages": [response],
+        "memory_context": memory_block,
         "token_usage": token_usage,
         "total_tokens": total_tokens,
         "iteration_count": iteration_count,

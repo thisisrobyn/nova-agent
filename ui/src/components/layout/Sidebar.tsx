@@ -14,6 +14,8 @@ import {
   Check,
   X,
   FolderInput,
+  Brain,
+  BookOpen,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { getFolderIcon } from '@/components/layout/FolderModal';
@@ -74,6 +76,8 @@ interface SidebarProps {
   onDeleteFolder: (id: string) => void;
   onLogout?: () => void;
   onOpenSettings?: () => void;
+  onOpenMemory?: () => void;
+  onOpenKnowledge?: () => void;
 }
 
 /* ── 3-dot menu ────────────────────────────────────────────── */
@@ -416,6 +420,8 @@ export function Sidebar({
   onDeleteFolder,
   onLogout,
   onOpenSettings,
+  onOpenMemory,
+  onOpenKnowledge,
 }: SidebarProps) {
   const uncategorized = chatHistory.filter((e) => !e.folderId);
 
@@ -465,6 +471,16 @@ export function Sidebar({
         </Button>
         <Button variant="ghost" size="sm" className="shrink-0 px-2" onClick={onCreateFolder} title="New folder">
           <FolderPlus className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+
+      {/* Memory button */}
+      <div className="px-3 pt-1.5">
+        <Button variant="ghost" size="sm" className="w-full justify-start gap-1.5 text-surface-400" onClick={onOpenMemory}>
+          <Brain className="h-3.5 w-3.5 text-primary-500" /> memory
+        </Button>
+        <Button variant="ghost" size="sm" className="w-full justify-start gap-1.5 text-surface-400" onClick={onOpenKnowledge}>
+          <BookOpen className="h-3.5 w-3.5 text-primary-500" /> knowledge_base
         </Button>
       </div>
 

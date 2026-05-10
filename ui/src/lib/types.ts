@@ -97,3 +97,62 @@ export type StreamEvent =
   | StreamDoneEvent
   | StreamErrorEvent
   | StreamStatusEvent;
+
+/* ── Memory ──────────────────────────────────────────────── */
+
+export interface MemoryFact {
+  id: number | null;
+  key: string;
+  value: string;
+  source_session: string | null;
+  confidence: number;
+  updated_at: string | null;
+}
+
+export interface EpisodicMemory {
+  id: number | null;
+  session_id: string;
+  summary: string;
+  key_topics: string[];
+  message_count: number;
+  created_at: string | null;
+}
+
+export interface FactListResponse {
+  facts: MemoryFact[];
+  count: number;
+}
+
+export interface EpisodeListResponse {
+  episodes: EpisodicMemory[];
+  count: number;
+}
+
+export interface MemoryClearResponse {
+  deleted_count: number;
+  message: string;
+}
+
+/* ── Documents (RAG) ─────────────────────────────────────── */
+
+export interface DocumentInfo {
+  id: string;
+  name: string;
+  file_type: string;
+  size_bytes: number;
+  chunk_count: number;
+  status: string;
+  error_message: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface DocumentListResponse {
+  documents: DocumentInfo[];
+  count: number;
+}
+
+export interface DocumentDeleteResponse {
+  deleted: boolean;
+  message: string;
+}

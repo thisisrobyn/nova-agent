@@ -93,3 +93,78 @@ class SettingsUpdate(BaseModel):
     model_name: Optional[str] = None
     temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
     ollama_base_url: Optional[str] = None
+
+
+# ── Memory schemas ───────────────────────────────────────────
+
+class FactResponse(BaseModel):
+    """A single memory fact."""
+
+    id: Optional[int] = None
+    key: str
+    value: str
+    source_session: Optional[str] = None
+    confidence: float = 1.0
+    updated_at: Optional[str] = None
+
+
+class FactListResponse(BaseModel):
+    """List of stored memory facts."""
+
+    facts: List[FactResponse] = Field(default_factory=list)
+    count: int = 0
+
+
+class EpisodeResponse(BaseModel):
+    """A single episodic memory record."""
+
+    id: Optional[int] = None
+    session_id: str
+    summary: str
+    key_topics: List[str] = Field(default_factory=list)
+    message_count: int = 0
+    created_at: Optional[str] = None
+
+
+class EpisodeListResponse(BaseModel):
+    """List of episodic memory records."""
+
+    episodes: List[EpisodeResponse] = Field(default_factory=list)
+    count: int = 0
+
+
+class MemoryClearResponse(BaseModel):
+    """Result of a memory clear operation."""
+
+    deleted_count: int = 0
+    message: str = ""
+
+
+# ── Document schemas ─────────────────────────────────────────
+
+class DocumentResponse(BaseModel):
+    """Metadata for an uploaded document."""
+
+    id: str
+    name: str
+    file_type: str
+    size_bytes: int
+    chunk_count: int = 0
+    status: str = "pending"
+    error_message: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class DocumentListResponse(BaseModel):
+    """List of documents in the knowledge base."""
+
+    documents: List[DocumentResponse] = Field(default_factory=list)
+    count: int = 0
+
+
+class DocumentDeleteResponse(BaseModel):
+    """Result of a document deletion."""
+
+    deleted: bool = False
+    message: str = ""

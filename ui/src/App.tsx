@@ -5,6 +5,8 @@ import { FolderModal } from '@/components/layout/FolderModal';
 import { ChatArea } from '@/components/chat/ChatArea';
 import { AuthScreen } from '@/components/auth/AuthScreen';
 import { ProfileSettings } from '@/components/auth/ProfileSettings';
+import { MemoryManager } from '@/components/memory/MemoryManager';
+import { KnowledgeBase } from '@/components/knowledge/KnowledgeBase';
 import { ToastProvider } from '@/components/ui/Toast';
 import { useChat } from '@/hooks/useChat';
 import { useAuth } from '@/hooks/useAuth';
@@ -55,6 +57,8 @@ export default function App() {
   const [folders, setFolders] = useState<ChatFolder[]>([]);
   const [showAuth, setShowAuth] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showMemory, setShowMemory] = useState(false);
+  const [showKnowledge, setShowKnowledge] = useState(false);
   const [folderModal, setFolderModal] = useState<{ open: boolean; editing: ChatFolder | null }>({
     open: false,
     editing: null,
@@ -248,6 +252,8 @@ export default function App() {
 
   const openAuth = useCallback(() => setShowAuth(true), []);
   const openSettings = useCallback(() => setShowSettings(true), []);
+  const openMemory = useCallback(() => setShowMemory(true), []);
+  const openKnowledge = useCallback(() => setShowKnowledge(true), []);
 
   // Count user messages for guest limit
   const userMessageCount = messages.filter((m) => m.role === 'user').length;
@@ -325,6 +331,8 @@ export default function App() {
             user={user ? { name: user.name, email: user.email, picture: user.picture } : undefined}
             onLogout={handleLogout}
             onOpenSettings={openSettings}
+            onOpenMemory={openMemory}
+            onOpenKnowledge={openKnowledge}
           />
         )}
 
@@ -334,6 +342,18 @@ export default function App() {
           onClose={() => setFolderModal({ open: false, editing: null })}
           onSave={handleSaveFolder}
           initial={folderModal.editing}
+        />
+
+        {/* Memory manager modal */}
+        <MemoryManager
+          open={showMemory}
+          onClose={() => setShowMemory(false)}
+        />
+
+        {/* Knowledge base modal */}
+        <KnowledgeBase
+          open={showKnowledge}
+          onClose={() => setShowKnowledge(false)}
         />
 
         {/* Profile settings modal */}

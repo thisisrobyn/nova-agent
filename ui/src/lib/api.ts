@@ -1,4 +1,4 @@
-import type { ChatResponse, HistoryResponse, OllamaModel, SettingsData, StreamEvent, ToolInfo } from './types';
+import type { ChatResponse, DocumentDeleteResponse, DocumentInfo, DocumentListResponse, EpisodeListResponse, FactListResponse, HistoryResponse, MemoryClearResponse, OllamaModel, SettingsData, StreamEvent, ToolInfo } from './types';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -157,4 +157,70 @@ export async function fetchOllamaModels(): Promise<OllamaModel[]> {
   if (!res.ok) throw new Error(`API error ${res.status}`);
   const data = (await res.json()) as { models: OllamaModel[] };
   return data.models;
+}
+
+/* ── Memory ───────────────────────────────────────────────── */
+
+export async function getMemoryFacts(): Promise<FactListResponse> {
+  const res = await fetch(`${API_BASE}/api/v1/memory/facts`);
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json() as Promise<FactListResponse>;
+}
+
+export async function clearMemoryFacts(): Promise<MemoryClearResponse> {
+  const res = await fetch(`${API_BASE}/api/v1/memory/facts`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json() as Promise<MemoryClearResponse>;
+}
+
+export async function getMemoryEpisodes(
+  limit = 50,
+  offset = 0,
+): Promise<EpisodeListResponse> {
+  const res = await fetch(
+    `${API_BASE}/api/v1/memory/episodes?limit=${limit}&offset=${offset}`,
+  );
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json() as Promise<EpisodeListResponse>;
+}
+
+export async function clearMemoryEpisodes(): Promise<MemoryClearResponse> {
+  const res = await fetch(`${API_BASE}/api/v1/memory/episodes`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json() as Promise<MemoryClearResponse>;
+}
+
+/* ── Documents (RAG) ──────────────────────────────────────── */
+
+export async function uploadDocument(file: File): Promise<DocumentInfo> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${API_BASE}/api/v1/documents/upload`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`Upload failed: ${detail}`);
+  }
+  return res.json() as Promise<DocumentInfo>;
+}
+
+export async function getDocuments(status?: string): Promise<DocumentListResponse> {
+  const params = status ? `?status=${status}` : '';
+  const res = await fetch(`${API_BASE}/api/v1/documents${params}`);
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json() as Promise<DocumentListResponse>;
+}
+
+export async function getDocument(id: string): Promise<DocumentInfo> {
+  const res = await fetch(`${API_BASE}/api/v1/documents/${id}`);
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json() as Promise<DocumentInfo>;
+}
+
+export async function deleteDocument(id: string): Promise<DocumentDeleteResponse> {
+  const res = await fetch(`${API_BASE}/api/v1/documents/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json() as Promise<DocumentDeleteResponse>;
 }
