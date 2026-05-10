@@ -45,11 +45,14 @@ def set_mcp_tools(tools: List[BaseTool]) -> None:
 
 def get_tools() -> List[BaseTool]:
     """Return all tools available to the NOVA agent (local + MCP)."""
+    import os
+
     from tools.calculator import calculator
     from tools.datetime_tool import convert_timezone, get_current_datetime
     from tools.files import list_directory, read_csv, read_excel, read_text_file
     from tools.conversation_tokens import count_conversation_tokens
     from tools.rag_tool import rag_search
+    from tools.web_search import web_search
 
     local: List[BaseTool] = [
         get_current_datetime,
@@ -61,7 +64,14 @@ def get_tools() -> List[BaseTool]:
         read_text_file,
         count_conversation_tokens,
         rag_search,
+        web_search,
     ]
+
+    # Conditionally add code executor
+    if os.getenv("CODE_EXEC_MODE", "subprocess").lower() != "disabled":
+        from tools.code_executor import execute_python
+        local.append(execute_python)
+
     return local + _mcp_tools
 
 

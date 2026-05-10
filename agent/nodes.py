@@ -24,6 +24,13 @@ SYSTEM_PROMPT = (
     "use the appropriate tool instead of guessing.\n"
     "You have access to the user's file system. Use list_directory to explore "
     "folders and read_text_file / read_csv / read_excel to read file contents.\n"
+    "Use rag_search to find information from the user's uploaded documents "
+    "in the knowledge base.\n"
+    "Use web_search when the user asks about current events, recent news, or "
+    "topics requiring up-to-date information. Always cite sources with URLs.\n"
+    "Use execute_python to run Python code when the user asks you to execute, "
+    "test, or demonstrate code. If execution fails, analyze the error and "
+    "generate corrected code.\n"
     "Current working directory: {cwd}\n"
     "Always respond in the same language the user is using."
 )
