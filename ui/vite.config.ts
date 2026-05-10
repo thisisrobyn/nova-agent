@@ -13,6 +13,7 @@ if (existsSync(manifestPath)) {
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  base: './',
   envDir: path.resolve(__dirname, '..'),
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),

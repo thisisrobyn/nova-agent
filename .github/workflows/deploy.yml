@@ -1,0 +1,77 @@
+name: Deploy UI
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  SERVER_IP: ${{ secrets.SERVER_IP }}
+  SERVER_USER: ubuntu
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check skip
+        id: check
+        run: |
+          MSG=$(git log -1 --pretty=%B)
+          if echo "$MSG" | grep -q "\[skip ci\]"; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.skip == 'false'
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install & build UI
+        if: steps.check.outputs.skip == 'false'
+        working-directory: ui
+        run: |
+          npm ci
+          npm run build
+
+      - name: Setup SSH
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H $SERVER_IP >> ~/.ssh/known_hosts
+
+      - name: Deploy to portfolio (projects/nova-agent)
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          rsync -avz --delete \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            ui/dist/ $SERVER_USER@$SERVER_IP:/home/ubuntu/thisisrober/projects/nova-agent/
+
+      - name: Deploy to subdomain location
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "mkdir -p /home/ubuntu/nova-agent-ui"
+          rsync -avz --delete \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            ui/dist/ $SERVER_USER@$SERVER_IP:/home/ubuntu/nova-agent-ui/
+
+      - name: Health check
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          sleep 3
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVER_IP/projects/nova-agent/ || echo "000")
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ /projects/nova-agent/ is live (HTTP $STATUS)"
+          else
+            echo "⚠️  /projects/nova-agent/ returned HTTP $STATUS"
+          fi
