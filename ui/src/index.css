@@ -33,6 +33,10 @@
 }
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     @apply bg-surface-950 text-surface-100;
     @apply antialiased;

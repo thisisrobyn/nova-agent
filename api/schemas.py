@@ -233,3 +233,45 @@ class TaskExecutionListResponse(BaseModel):
 
     executions: List[TaskExecutionResponse] = Field(default_factory=list)
     count: int = 0
+
+
+# ── GitHub Roadmap ──────────────────────────────────────
+
+class RoadmapLabel(BaseModel):
+    """Label on a GitHub issue."""
+
+    name: str
+    color: str
+
+
+class RoadmapIssue(BaseModel):
+    """An issue/item in the project roadmap."""
+
+    title: str
+    number: Optional[int] = None
+    url: Optional[str] = None
+    state: Optional[str] = None
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    size: Optional[str] = None
+    labels: List[RoadmapLabel] = Field(default_factory=list)
+
+
+class RoadmapIteration(BaseModel):
+    """A project iteration (e.g. Q2, Q3)."""
+
+    id: str
+    title: str
+    start_date: Optional[str] = None
+    duration: Optional[int] = None
+    items: List[RoadmapIssue] = Field(default_factory=list)
+
+
+class RoadmapResponse(BaseModel):
+    """Full roadmap response with iterations and items."""
+
+    project_title: str
+    project_description: Optional[str] = None
+    project_url: str
+    iterations: List[RoadmapIteration] = Field(default_factory=list)
+    backlog: List[RoadmapIssue] = Field(default_factory=list)
