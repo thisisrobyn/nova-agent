@@ -1,4 +1,4 @@
-import type { ChatResponse, DocumentDeleteResponse, DocumentInfo, DocumentListResponse, EpisodeListResponse, FactListResponse, HistoryResponse, MemoryClearResponse, OllamaModel, SettingsData, StreamEvent, ToolInfo } from './types';
+import type { ChatResponse, DocumentDeleteResponse, DocumentInfo, DocumentListResponse, EpisodeListResponse, FactListResponse, HistoryResponse, MemoryClearResponse, OllamaModel, ScheduledTask, ScheduledTaskListResponse, SettingsData, StreamEvent, TaskExecutionListResponse, ToolInfo } from './types';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -223,4 +223,64 @@ export async function deleteDocument(id: string): Promise<DocumentDeleteResponse
   const res = await fetch(`${API_BASE}/api/v1/documents/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json() as Promise<DocumentDeleteResponse>;
+}
+
+/* ── Scheduler ────────────────────────────────────────────── */
+
+export async function getScheduledTasks(): Promise<ScheduledTaskListResponse> {
+  const res = await fetch(`${API_BASE}/api/v1/scheduler/tasks`);
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json() as Promise<ScheduledTaskListResponse>;
+}
+
+export async function createScheduledTask(data: {
+  name: string;
+  prompt: string;
+  trigger_type: string;
+  trigger_args: Record<string, unknown>;
+  enabled?: boolean;
+}): Promise<ScheduledTask> {
+  const res = await fetch(`${API_BASE}/api/v1/scheduler/tasks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`Failed to create task: ${detail}`);
+  }
+  return res.json() as Promise<ScheduledTask>;
+}
+
+export async function updateScheduledTask(
+  id: string,
+  data: Record<string, unknown>,
+): Promise<ScheduledTask> {
+  const res = await fetch(`${API_BASE}/api/v1/scheduler/tasks/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`Failed to update task: ${detail}`);
+  }
+  return res.json() as Promise<ScheduledTask>;
+}
+
+export async function deleteScheduledTask(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/v1/scheduler/tasks/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+}
+
+export async function getTaskExecutionLogs(
+  taskId: string,
+  limit = 20,
+  offset = 0,
+): Promise<TaskExecutionListResponse> {
+  const res = await fetch(
+    `${API_BASE}/api/v1/scheduler/tasks/${taskId}/logs?limit=${limit}&offset=${offset}`,
+  );
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json() as Promise<TaskExecutionListResponse>;
 }

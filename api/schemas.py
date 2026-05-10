@@ -168,3 +168,68 @@ class DocumentDeleteResponse(BaseModel):
 
     deleted: bool = False
     message: str = ""
+
+
+# ── Scheduler schemas ────────────────────────────────────────
+
+class ScheduledTaskCreate(BaseModel):
+    """Request to create a new scheduled task."""
+
+    name: str = Field(..., min_length=1, max_length=200, description="Task name")
+    prompt: str = Field(..., min_length=1, description="Prompt sent to the NOVA agent")
+    trigger_type: str = Field(..., pattern=r"^(cron|interval)$", description="'cron' or 'interval'")
+    trigger_args: Dict[str, Any] = Field(..., description="APScheduler trigger kwargs")
+    enabled: bool = Field(default=True, description="Whether the task is active")
+
+
+class ScheduledTaskUpdate(BaseModel):
+    """Partial update for a scheduled task."""
+
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    prompt: Optional[str] = Field(None, min_length=1)
+    trigger_type: Optional[str] = Field(None, pattern=r"^(cron|interval)$")
+    trigger_args: Optional[Dict[str, Any]] = None
+    enabled: Optional[bool] = None
+
+
+class ScheduledTaskResponse(BaseModel):
+    """A scheduled task returned by the API."""
+
+    id: str
+    name: str
+    prompt: str
+    trigger_type: str
+    trigger_args: Dict[str, Any]
+    enabled: bool = True
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    last_run_at: Optional[str] = None
+    next_run_at: Optional[str] = None
+
+
+class ScheduledTaskListResponse(BaseModel):
+    """List of scheduled tasks."""
+
+    tasks: List[ScheduledTaskResponse] = Field(default_factory=list)
+    count: int = 0
+
+
+class TaskExecutionResponse(BaseModel):
+    """A single task execution record."""
+
+    id: str
+    task_id: str
+    started_at: str
+    finished_at: Optional[str] = None
+    duration_seconds: Optional[float] = None
+    status: str = "running"
+    result_summary: Optional[str] = None
+    error: Optional[str] = None
+    tokens_used: Optional[int] = None
+
+
+class TaskExecutionListResponse(BaseModel):
+    """List of task execution records."""
+
+    executions: List[TaskExecutionResponse] = Field(default_factory=list)
+    count: int = 0

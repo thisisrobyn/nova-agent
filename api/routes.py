@@ -32,8 +32,14 @@ from api.schemas import (
     MemoryClearResponse,
     OllamaModel,
     OllamaModelsResponse,
+    ScheduledTaskCreate,
+    ScheduledTaskListResponse,
+    ScheduledTaskResponse,
+    ScheduledTaskUpdate,
     SettingsResponse,
     SettingsUpdate,
+    TaskExecutionListResponse,
+    TaskExecutionResponse,
     TitleRequest,
     TitleResponse,
     ToolInfo,
@@ -771,4 +777,128 @@ async def delete_document_endpoint(document_id: str) -> DocumentDeleteResponse:
 
     return DocumentDeleteResponse(
         deleted=True, message=f"Document {document_id} deleted successfully"
+    )
+
+
+# ── Scheduler API routes ───────────────────────────────────────────
+
+
+def _task_to_response(task) -> ScheduledTaskResponse:
+    """Convert a ScheduledTask model to a ScheduledTaskResponse."""
+    return ScheduledTaskResponse(
+        id=task.id,
+        name=task.name,
+        prompt=task.prompt,
+        trigger_type=task.trigger_type,
+        trigger_args=task.trigger_args,
+        enabled=task.enabled,
+        created_at=task.created_at.isoformat() if task.created_at else None,
+        updated_at=task.updated_at.isoformat() if task.updated_at else None,
+        last_run_at=task.last_run_at.isoformat() if task.last_run_at else None,
+        next_run_at=task.next_run_at.isoformat() if task.next_run_at else None,
+    )
+
+
+def _execution_to_response(exe) -> TaskExecutionResponse:
+    """Convert a TaskExecution model to a TaskExecutionResponse."""
+    return TaskExecutionResponse(
+        id=exe.id,
+        task_id=exe.task_id,
+        started_at=exe.started_at.isoformat(),
+        finished_at=exe.finished_at.isoformat() if exe.finished_at else None,
+        duration_seconds=exe.duration_seconds,
+        status=exe.status,
+        result_summary=exe.result_summary,
+        error=exe.error,
+        tokens_used=exe.tokens_used,
+    )
+
+
+@router.get("/scheduler/tasks", response_model=ScheduledTaskListResponse)
+async def list_scheduled_tasks() -> ScheduledTaskListResponse:
+    """List all scheduled tasks."""
+    from scheduler import get_scheduler
+
+    tasks = await get_scheduler().list_tasks()
+    return ScheduledTaskListResponse(
+        tasks=[_task_to_response(t) for t in tasks],
+        count=len(tasks),
+    )
+
+
+@router.post("/scheduler/tasks", response_model=ScheduledTaskResponse, status_code=201)
+async def create_scheduled_task(body: ScheduledTaskCreate) -> ScheduledTaskResponse:
+    """Create a new scheduled task."""
+    from scheduler import get_scheduler
+
+    task = await get_scheduler().create_task(
+        name=body.name,
+        prompt=body.prompt,
+        trigger_type=body.trigger_type,
+        trigger_args=body.trigger_args,
+        enabled=body.enabled,
+    )
+    return _task_to_response(task)
+
+
+@router.get("/scheduler/tasks/{task_id}", response_model=ScheduledTaskResponse)
+async def get_scheduled_task(task_id: str) -> ScheduledTaskResponse:
+    """Get a single scheduled task by ID."""
+    from scheduler import get_scheduler
+
+    task = await get_scheduler().get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Scheduled task not found")
+    return _task_to_response(task)
+
+
+@router.put("/scheduler/tasks/{task_id}", response_model=ScheduledTaskResponse)
+async def update_scheduled_task(task_id: str, body: ScheduledTaskUpdate) -> ScheduledTaskResponse:
+    """Update a scheduled task (partial update)."""
+    from scheduler import get_scheduler
+
+    fields = body.model_dump(exclude_unset=True)
+    if not fields:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    task = await get_scheduler().update_task(task_id, **fields)
+    if not task:
+        raise HTTPException(status_code=404, detail="Scheduled task not found")
+    return _task_to_response(task)
+
+
+@router.delete("/scheduler/tasks/{task_id}")
+async def delete_scheduled_task(task_id: str) -> dict:
+    """Delete a scheduled task and all its execution logs."""
+    from scheduler import get_scheduler
+
+    deleted = await get_scheduler().delete_task(task_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Scheduled task not found")
+    return {"deleted": True, "task_id": task_id}
+
+
+@router.get("/scheduler/tasks/{task_id}/logs", response_model=TaskExecutionListResponse)
+async def get_task_execution_logs(
+    task_id: str,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    status: str | None = Query(default=None),
+) -> TaskExecutionListResponse:
+    """Get execution logs for a scheduled task."""
+    from scheduler import get_scheduler
+
+    scheduler = get_scheduler()
+
+    # Verify task exists
+    task = await scheduler.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Scheduled task not found")
+
+    executions = await scheduler.get_task_logs(
+        task_id, limit=limit, offset=offset, status=status,
+    )
+    return TaskExecutionListResponse(
+        executions=[_execution_to_response(e) for e in executions],
+        count=len(executions),
     )

@@ -16,6 +16,7 @@ import {
   FolderInput,
   Brain,
   BookOpen,
+  Clock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { getFolderIcon } from '@/components/layout/FolderModal';
@@ -78,6 +79,7 @@ interface SidebarProps {
   onOpenSettings?: () => void;
   onOpenMemory?: () => void;
   onOpenKnowledge?: () => void;
+  onOpenScheduler?: () => void;
 }
 
 /* ── 3-dot menu ────────────────────────────────────────────── */
@@ -422,6 +424,7 @@ export function Sidebar({
   onOpenSettings,
   onOpenMemory,
   onOpenKnowledge,
+  onOpenScheduler,
 }: SidebarProps) {
   const uncategorized = chatHistory.filter((e) => !e.folderId);
 
@@ -481,6 +484,9 @@ export function Sidebar({
         </Button>
         <Button variant="ghost" size="sm" className="w-full justify-start gap-1.5 text-surface-400" onClick={onOpenKnowledge}>
           <BookOpen className="h-3.5 w-3.5 text-primary-500" /> knowledge_base
+        </Button>
+        <Button variant="ghost" size="sm" className="w-full justify-start gap-1.5 text-surface-400" onClick={onOpenScheduler}>
+          <Clock className="h-3.5 w-3.5 text-primary-500" /> scheduler
         </Button>
       </div>
 

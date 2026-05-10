@@ -54,8 +54,27 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("MCP tools not loaded", error=str(exc))
 
+    # ── Start scheduler ─────────────────────────────────────────
+    try:
+        from scheduler import get_scheduler
+
+        scheduler = get_scheduler()
+        await scheduler.start()
+        logger.info("scheduler started")
+    except Exception as exc:
+        logger.warning("scheduler not started", error=str(exc))
+
     logger.info("NOVA API started")
     yield
+
+    # ── Shutdown scheduler ────────────────────────────────────────
+    try:
+        from scheduler import get_scheduler
+
+        get_scheduler().shutdown()
+    except Exception:
+        pass
+
     logger.info("NOVA API shutting down")
 
 
@@ -84,8 +103,43 @@ def create_app() -> FastAPI:
 
     @application.get("/health")
     async def health() -> dict:
-        """Health check endpoint."""
-        return {"status": "ok", "service": "nova-agent"}
+        """Health check endpoint with subsystem status."""
+        subsystems: dict = {}
+
+        # Scheduler status
+        try:
+            from scheduler import get_scheduler
+            sched = get_scheduler()
+            subsystems["scheduler"] = "running" if sched.is_running else "stopped"
+        except Exception:
+            subsystems["scheduler"] = "unavailable"
+
+        # Memory status
+        try:
+            from memory import get_memory_manager
+            mm = get_memory_manager()
+            subsystems["memory"] = "ok" if mm else "unavailable"
+        except Exception:
+            subsystems["memory"] = "unavailable"
+
+        # Ollama connectivity
+        try:
+            import httpx
+            ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+            async with httpx.AsyncClient(timeout=3) as client:
+                resp = await client.get(f"{ollama_url}/api/tags")
+                subsystems["ollama"] = "connected" if resp.status_code == 200 else "error"
+        except Exception:
+            subsystems["ollama"] = "unreachable"
+
+        overall = "ok" if subsystems.get("ollama") == "connected" else "degraded"
+
+        return {
+            "status": overall,
+            "service": "nova-agent",
+            "version": "0.3.0",
+            "subsystems": subsystems,
+        }
 
     return application
 

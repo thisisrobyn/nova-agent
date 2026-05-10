@@ -156,3 +156,40 @@ export interface DocumentDeleteResponse {
   deleted: boolean;
   message: string;
 }
+
+/* ── Scheduler ───────────────────────────────────────────── */
+
+export interface ScheduledTask {
+  id: string;
+  name: string;
+  prompt: string;
+  trigger_type: 'cron' | 'interval';
+  trigger_args: Record<string, unknown>;
+  enabled: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+  last_run_at: string | null;
+  next_run_at: string | null;
+}
+
+export interface ScheduledTaskListResponse {
+  tasks: ScheduledTask[];
+  count: number;
+}
+
+export interface TaskExecution {
+  id: string;
+  task_id: string;
+  started_at: string;
+  finished_at: string | null;
+  duration_seconds: number | null;
+  status: string;
+  result_summary: string | null;
+  error: string | null;
+  tokens_used: number | null;
+}
+
+export interface TaskExecutionListResponse {
+  executions: TaskExecution[];
+  count: number;
+}
