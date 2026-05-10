@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.0](https://github.com/thisisrober/nova-agent/compare/v0.4.0...v0.5.0) (2026-05-10)
+
+
+### Features
+
+* add deployment pipeline and nginx configs for portfolio integration ([dda3f18](https://github.com/thisisrober/nova-agent/commit/dda3f185c86da479e8f77cb7350f53f24d67be62))
+* split prod (landing showcase) and dev (full chat app) modes ([fd65bdc](https://github.com/thisisrober/nova-agent/commit/fd65bdc655c92ecccefc60c6f9f86a527891bfcb))
+
+
+### Bug Fixes
+
+* production UI adjustments ([25ec476](https://github.com/thisisrober/nova-agent/commit/25ec476ddd2d26269b662c4ac3c69f63a018bbad))
+
 ## [0.4.0](https://github.com/thisisrober/nova-agent/compare/v0.3.0...v0.4.0) (2026-05-10)
 
 
