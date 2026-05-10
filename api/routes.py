@@ -32,6 +32,10 @@ from api.schemas import (
     MemoryClearResponse,
     OllamaModel,
     OllamaModelsResponse,
+    RoadmapIteration,
+    RoadmapIssue,
+    RoadmapLabel,
+    RoadmapResponse,
     ScheduledTaskCreate,
     ScheduledTaskListResponse,
     ScheduledTaskResponse,
@@ -933,4 +937,182 @@ async def get_task_execution_logs(
     return TaskExecutionListResponse(
         executions=[_execution_to_response(e) for e in executions],
         count=len(executions),
+    )
+
+
+# ── GitHub Roadmap ───────────────────────────────────────
+
+_GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
+
+_PROJECT_QUERY = """
+query($owner: String!, $number: Int!) {
+  user(login: $owner) {
+    projectV2(number: $number) {
+      title
+      shortDescription
+      url
+      fields(first: 30) {
+        nodes {
+          ... on ProjectV2IterationField {
+            id
+            name
+            configuration {
+              iterations { id title startDate duration }
+              completedIterations { id title startDate duration }
+            }
+          }
+        }
+      }
+      items(first: 100) {
+        nodes {
+          fieldValues(first: 12) {
+            nodes {
+              ... on ProjectV2ItemFieldSingleSelectValue {
+                name
+                field { ... on ProjectV2SingleSelectField { name } }
+              }
+              ... on ProjectV2ItemFieldIterationValue {
+                title
+                startDate
+                duration
+                iterationId
+                field { ... on ProjectV2IterationField { name } }
+              }
+            }
+          }
+          content {
+            ... on Issue {
+              title
+              number
+              url
+              state
+              labels(first: 10) {
+                nodes { name color }
+              }
+            }
+            ... on DraftIssue {
+              title
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
+
+@router.get("/github/roadmap", response_model=RoadmapResponse)
+async def get_roadmap() -> RoadmapResponse:
+    """Fetch the project roadmap from GitHub Projects V2."""
+    import os
+
+    token = os.getenv("GITHUB_TOKEN", "")
+    owner = os.getenv("GITHUB_PROJECT_OWNER", "thisisrober")
+    number = int(os.getenv("GITHUB_PROJECT_NUMBER", "3"))
+
+    if not token:
+        raise HTTPException(
+            status_code=503,
+            detail="GITHUB_TOKEN not configured. Set it in .env with read:project scope.",
+        )
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            _GITHUB_GRAPHQL_URL,
+            json={"query": _PROJECT_QUERY, "variables": {"owner": owner, "number": number}},
+            headers=headers,
+        )
+
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="GitHub API request failed")
+
+    data = resp.json()
+    if "errors" in data:
+        raise HTTPException(
+            status_code=502,
+            detail=data["errors"][0].get("message", "GitHub GraphQL error"),
+        )
+
+    project = data["data"]["user"]["projectV2"]
+
+    # Build iteration map
+    iteration_map: Dict[str, RoadmapIteration] = {}
+    for field in project["fields"]["nodes"]:
+        if not field:
+            continue
+        cfg = field.get("configuration")
+        if cfg:
+            for it in cfg.get("iterations", []) + cfg.get("completedIterations", []):
+                iteration_map[it["id"]] = RoadmapIteration(
+                    id=it["id"],
+                    title=it["title"],
+                    start_date=it.get("startDate"),
+                    duration=it.get("duration"),
+                )
+
+    backlog: list[RoadmapIssue] = []
+
+    # Process items
+    for item in project["items"]["nodes"]:
+        content = item.get("content") or {}
+        if not content.get("title"):
+            continue
+
+        labels = [
+            RoadmapLabel(name=l["name"], color=l["color"])
+            for l in (content.get("labels", {}).get("nodes") or [])
+        ]
+
+        status = None
+        priority = None
+        size = None
+        iteration_id = None
+
+        for fv in item.get("fieldValues", {}).get("nodes", []):
+            if not fv:
+                continue
+            field_name = (fv.get("field") or {}).get("name", "")
+            if field_name == "Status":
+                status = fv.get("name")
+            elif field_name == "Priority":
+                priority = fv.get("name")
+            elif field_name == "Size":
+                size = fv.get("name")
+            elif field_name == "Iteration":
+                iteration_id = fv.get("iterationId")
+
+        issue = RoadmapIssue(
+            title=content.get("title", ""),
+            number=content.get("number"),
+            url=content.get("url"),
+            state=content.get("state"),
+            status=status,
+            priority=priority,
+            size=size,
+            labels=labels,
+        )
+
+        if iteration_id and iteration_id in iteration_map:
+            iteration_map[iteration_id].items.append(issue)
+        else:
+            backlog.append(issue)
+
+    # Sort iterations by start_date
+    sorted_iterations = sorted(
+        iteration_map.values(),
+        key=lambda it: it.start_date or "",
+    )
+
+    return RoadmapResponse(
+        project_title=project.get("title", ""),
+        project_description=project.get("shortDescription"),
+        project_url=project.get("url", ""),
+        iterations=sorted_iterations,
+        backlog=backlog,
     )
