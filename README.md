@@ -1,8 +1,10 @@
 <div align="center">
 
-# NOVA — Neural Orchestration & Virtual Agent
+<img src="ui/public/nova-logo.png" alt="NOVA logo" width="160" />
 
-An advanced conversational AI agent built with **LangGraph**, **LangChain**, **FastAPI** and **React**.
+# Neural Orchestration & Virtual Agent
+
+An advanced conversational AI agent built with **LangGraph**, **FastAPI** and **React**.
 
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Follow-0A66C2?style=for-the-badge&logo=linkedin)](https://www.linkedin.com/in/thisisrober)
 [![GitHub](https://img.shields.io/badge/GitHub-Follow-181717?style=for-the-badge&logo=github)](https://github.com/thisisrober)
@@ -19,7 +21,7 @@ Think of it like having a helpful robot on your computer that understands what y
 ## Features
 
 - 🤖 **AI Chat** — talk to NOVA in natural language; it figures out what to do
-- 🔧 **Built-in tools** — calculator, date/time, CSV/Excel/text file reader, directory listing
+- 🔧 **Built-in tools** — calculator, date/time, CSV/Excel/text file reader, directory listing, token counter
 - 🌐 **MCP integration** — connects to external tool servers (e.g. LangChain Docs search)
 - ⚡ **Real-time streaming** — see the response appear word-by-word as NOVA thinks
 - 🎨 **Modern web UI** — React app with dark mode, markdown rendering, syntax-highlighted code blocks, file drag & drop, toast notifications
