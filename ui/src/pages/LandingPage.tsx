@@ -2,6 +2,10 @@ import { useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import { motion, useInView } from 'framer-motion';
 import { useRoadmap, type RoadmapIssue, type RoadmapIteration } from '@/hooks/useRoadmap';
+
+const GITHUB_REPO = 'https://github.com/thisisrober/nova-agent';
+const IS_PROD = import.meta.env.PROD;
+
 import {
   ArrowRight,
   Brain,
@@ -620,10 +624,10 @@ export function LandingPage() {
               <Github className="h-5 w-5" />
             </a>
             <button
-              onClick={() => navigate('/chat')}
+              onClick={() => IS_PROD ? window.open(GITHUB_REPO, '_blank') : navigate('/chat')}
               className="cursor-pointer rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-black transition-all hover:bg-primary-500 hover:shadow-lg hover:shadow-primary-500/20"
             >
-              Open Agent
+              {IS_PROD ? 'View on GitHub' : 'Open Agent'}
             </button>
           </div>
         </div>
@@ -678,10 +682,10 @@ export function LandingPage() {
             className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center"
           >
             <button
-              onClick={() => navigate('/chat')}
+              onClick={() => IS_PROD ? window.open(GITHUB_REPO, '_blank') : navigate('/chat')}
               className="group flex cursor-pointer items-center gap-2 rounded-xl bg-primary-600 px-8 py-3.5 text-sm font-semibold text-black transition-all hover:bg-primary-500 hover:shadow-xl hover:shadow-primary-500/25"
             >
-              Start Chatting
+              {IS_PROD ? 'Get it on GitHub' : 'Start Chatting'}
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
             </button>
             <button
@@ -1032,10 +1036,10 @@ export function LandingPage() {
             </p>
             <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
               <button
-                onClick={() => navigate('/chat')}
+                onClick={() => IS_PROD ? window.open(GITHUB_REPO, '_blank') : navigate('/chat')}
                 className="group flex cursor-pointer items-center gap-2 rounded-xl bg-primary-600 px-8 py-3.5 text-sm font-semibold text-black transition-all hover:bg-primary-500 hover:shadow-xl hover:shadow-primary-500/25"
               >
-                Launch NOVA
+                {IS_PROD ? 'Get it on GitHub' : 'Launch NOVA'}
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
               </button>
               <a

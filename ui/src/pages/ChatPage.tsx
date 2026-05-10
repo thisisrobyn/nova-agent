@@ -68,6 +68,10 @@ export function ChatPage() {
 
   const { user, authState, isAuthenticated, isGuest, login, register, confirm, logout, updateName, updatePicture, changePassword, deleteAccount } = useAuth();
 
+  // In dev mode, skip auth entirely — always show full UI
+  const effectiveIsAuthenticated = !import.meta.env.PROD || isAuthenticated;
+  const effectiveIsGuest = import.meta.env.PROD ? isGuest : false;
+
   const sessionJustChanged = useRef(false);
   const titleGeneratedFor = useRef<Set<string>>(new Set());
 
@@ -246,9 +250,9 @@ export function ChatPage() {
   const openScheduler = useCallback(() => setShowScheduler(true), []);
 
   const userMessageCount = messages.filter((m) => m.role === 'user').length;
-  const guestLimitReached = isGuest && userMessageCount >= GUEST_MAX_MESSAGES;
+  const guestLimitReached = effectiveIsGuest && userMessageCount >= GUEST_MAX_MESSAGES;
 
-  if (authState === 'loading') {
+  if (import.meta.env.PROD && authState === 'loading') {
     return (
       <div className="flex h-screen items-center justify-center bg-surface-950">
         <div className="text-center">
@@ -295,14 +299,14 @@ export function ChatPage() {
             onSend={send}
             onRetry={retry}
             onEditMessage={editMessage}
-            isGuest={isGuest}
+            isGuest={effectiveIsGuest}
             guestMessageCount={userMessageCount}
             guestMaxMessages={GUEST_MAX_MESSAGES}
             guestLimitReached={guestLimitReached}
             onLogin={openAuth}
           />
         </main>
-        {isAuthenticated && (
+        {effectiveIsAuthenticated && (
           <Sidebar
             chatHistory={chatHistory}
             folders={folders}
