@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   MessageSquare,
   Plus,
@@ -426,6 +427,7 @@ export function Sidebar({
   onOpenKnowledge,
   onOpenScheduler,
 }: SidebarProps) {
+  const navigate = useNavigate();
   const uncategorized = chatHistory.filter((e) => !e.folderId);
 
   // Drop target state for the uncategorized zone (remove from folder)
@@ -459,7 +461,10 @@ export function Sidebar({
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col border-l border-primary-900/30 bg-surface-900/50">
       {/* Header */}
-      <div className="flex items-center gap-2 border-b border-primary-900/30 px-4 py-3">
+      <div
+        onClick={() => navigate('/')}
+        className="flex items-center gap-2 border-b border-primary-900/30 px-4 py-3 cursor-pointer transition-colors hover:bg-surface-800/50"
+      >
         <Terminal className="h-4 w-4 text-primary-500" />
         <span className="text-xs font-bold uppercase tracking-widest text-primary-500 text-glow">
           NOVA

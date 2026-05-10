@@ -16,7 +16,7 @@ Public API
 """
 
 import asyncio
-import logging
+import structlog
 from typing import Any, Dict, List
 
 from langchain_core.messages import HumanMessage
@@ -27,7 +27,7 @@ from langgraph.prebuilt import ToolNode
 from agent.nodes import agent_node, should_use_tools
 from agent.state import NOVAState
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 # ── Tool registry ────────────────────────────────────────────────────
 

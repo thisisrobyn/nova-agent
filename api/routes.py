@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import time
 from pathlib import Path
 from typing import Any, Dict
 
 import httpx
+import structlog
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query
 from fastapi.responses import StreamingResponse
 from langchain_core.callbacks import AsyncCallbackHandler
@@ -45,7 +45,7 @@ from api.schemas import (
     ToolInfo,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1")
 
@@ -521,9 +521,13 @@ async def update_settings(body: SettingsUpdate) -> SettingsResponse:
 @router.get("/ollama/models", response_model=OllamaModelsResponse)
 async def get_ollama_models() -> OllamaModelsResponse:
     """List locally available Ollama models with tier classification."""
-    models_raw = await list_ollama_models()
-    models = [OllamaModel(**m) for m in models_raw]
-    return OllamaModelsResponse(models=models)
+    try:
+        models_raw = await list_ollama_models()
+        models = [OllamaModel(**m) for m in models_raw]
+        return OllamaModelsResponse(models=models)
+    except Exception as e:
+        logger.warning("failed to list Ollama models", error=str(e))
+        raise HTTPException(status_code=503, detail="Cannot connect to Ollama")
 
 
 # ── Memory extraction helper ───────────────────────────────────────
@@ -581,70 +585,86 @@ async def _trigger_memory_extraction(session_id: str, state: Dict[str, Any]) -> 
 @router.get("/memory/facts", response_model=FactListResponse)
 async def get_memory_facts() -> FactListResponse:
     """List all stored memory facts."""
-    from memory import get_memory_manager
+    try:
+        from memory import get_memory_manager
 
-    mm = get_memory_manager()
-    facts = await mm.get_all_facts()
-    return FactListResponse(
-        facts=[
-            FactResponse(
-                id=f.id,
-                key=f.key,
-                value=f.value,
-                source_session=f.source_session,
-                confidence=f.confidence,
-                updated_at=f.updated_at.isoformat() if f.updated_at else None,
-            )
-            for f in facts
-        ],
-        count=len(facts),
-    )
+        mm = get_memory_manager()
+        facts = await mm.get_all_facts()
+        return FactListResponse(
+            facts=[
+                FactResponse(
+                    id=f.id,
+                    key=f.key,
+                    value=f.value,
+                    source_session=f.source_session,
+                    confidence=f.confidence,
+                    updated_at=f.updated_at.isoformat() if f.updated_at else None,
+                )
+                for f in facts
+            ],
+            count=len(facts),
+        )
+    except Exception as e:
+        logger.warning("failed to get memory facts", error=str(e))
+        raise HTTPException(status_code=503, detail="Memory service unavailable")
 
 
 @router.delete("/memory/facts", response_model=MemoryClearResponse)
 async def clear_memory_facts() -> MemoryClearResponse:
     """Delete all stored memory facts."""
-    from memory import get_memory_manager
+    try:
+        from memory import get_memory_manager
 
-    mm = get_memory_manager()
-    count = await mm.delete_all_facts()
-    return MemoryClearResponse(deleted_count=count, message=f"Deleted {count} facts")
+        mm = get_memory_manager()
+        count = await mm.delete_all_facts()
+        return MemoryClearResponse(deleted_count=count, message=f"Deleted {count} facts")
+    except Exception as e:
+        logger.warning("failed to clear memory facts", error=str(e))
+        raise HTTPException(status_code=503, detail="Memory service unavailable")
 
 
 @router.get("/memory/episodes", response_model=EpisodeListResponse)
 async def get_memory_episodes(limit: int = 50, offset: int = 0) -> EpisodeListResponse:
     """List episodic memory records with pagination."""
-    from memory import get_memory_manager
+    try:
+        from memory import get_memory_manager
 
-    mm = get_memory_manager()
-    episodes = await mm.episodic.get_all_episodes(limit=limit, offset=offset)
-    total = await mm.episodic.count_episodes()
-    return EpisodeListResponse(
-        episodes=[
-            EpisodeResponse(
-                id=e.id,
-                session_id=e.session_id,
-                summary=e.summary,
-                key_topics=e.key_topics,
-                message_count=e.message_count,
-                created_at=e.created_at.isoformat() if e.created_at else None,
-            )
-            for e in episodes
-        ],
-        count=total,
-    )
+        mm = get_memory_manager()
+        episodes = await mm.episodic.get_all_episodes(limit=limit, offset=offset)
+        total = await mm.episodic.count_episodes()
+        return EpisodeListResponse(
+            episodes=[
+                EpisodeResponse(
+                    id=e.id,
+                    session_id=e.session_id,
+                    summary=e.summary,
+                    key_topics=e.key_topics,
+                    message_count=e.message_count,
+                    created_at=e.created_at.isoformat() if e.created_at else None,
+                )
+                for e in episodes
+            ],
+            count=total,
+        )
+    except Exception as e:
+        logger.warning("failed to get episodes", error=str(e))
+        raise HTTPException(status_code=503, detail="Memory service unavailable")
 
 
 @router.delete("/memory/episodes", response_model=MemoryClearResponse)
 async def clear_memory_episodes() -> MemoryClearResponse:
     """Delete all episodic memory records."""
-    from memory import get_memory_manager
+    try:
+        from memory import get_memory_manager
 
-    mm = get_memory_manager()
-    count = await mm.episodic.delete_all_episodes()
-    return MemoryClearResponse(
-        deleted_count=count, message=f"Deleted {count} episodes"
-    )
+        mm = get_memory_manager()
+        count = await mm.episodic.delete_all_episodes()
+        return MemoryClearResponse(
+            deleted_count=count, message=f"Deleted {count} episodes"
+        )
+    except Exception as e:
+        logger.warning("failed to clear episodes", error=str(e))
+        raise HTTPException(status_code=503, detail="Memory service unavailable")
 
 
 # ── Document API routes (RAG Knowledge Base) ───────────────────────
