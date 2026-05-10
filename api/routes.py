@@ -739,26 +739,30 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentResponse:
 @router.get("/documents", response_model=DocumentListResponse)
 async def list_documents(status: str | None = Query(None)) -> DocumentListResponse:
     """List all documents in the knowledge base."""
-    from memory.rag.ingestion import get_documents
+    try:
+        from memory.rag.ingestion import get_documents
 
-    docs = await get_documents(status=status)
-    return DocumentListResponse(
-        documents=[
-            DocumentResponse(
-                id=d.id,
-                name=d.name,
-                file_type=d.file_type,
-                size_bytes=d.size_bytes,
-                chunk_count=d.chunk_count,
-                status=d.status,
-                error_message=d.error_message,
-                created_at=d.created_at.isoformat() if d.created_at else None,
-                updated_at=d.updated_at.isoformat() if d.updated_at else None,
-            )
-            for d in docs
-        ],
-        count=len(docs),
-    )
+        docs = await get_documents(status=status)
+        return DocumentListResponse(
+            documents=[
+                DocumentResponse(
+                    id=d.id,
+                    name=d.name,
+                    file_type=d.file_type,
+                    size_bytes=d.size_bytes,
+                    chunk_count=d.chunk_count,
+                    status=d.status,
+                    error_message=d.error_message,
+                    created_at=d.created_at.isoformat() if d.created_at else None,
+                    updated_at=d.updated_at.isoformat() if d.updated_at else None,
+                )
+                for d in docs
+            ],
+            count=len(docs),
+        )
+    except Exception as e:
+        logger.warning("failed to list documents", error=str(e))
+        raise HTTPException(status_code=503, detail="Knowledge base unavailable")
 
 
 @router.get("/documents/{document_id}", response_model=DocumentResponse)
@@ -837,28 +841,36 @@ def _execution_to_response(exe) -> TaskExecutionResponse:
 @router.get("/scheduler/tasks", response_model=ScheduledTaskListResponse)
 async def list_scheduled_tasks() -> ScheduledTaskListResponse:
     """List all scheduled tasks."""
-    from scheduler import get_scheduler
+    try:
+        from scheduler import get_scheduler
 
-    tasks = await get_scheduler().list_tasks()
-    return ScheduledTaskListResponse(
-        tasks=[_task_to_response(t) for t in tasks],
-        count=len(tasks),
-    )
+        tasks = await get_scheduler().list_tasks()
+        return ScheduledTaskListResponse(
+            tasks=[_task_to_response(t) for t in tasks],
+            count=len(tasks),
+        )
+    except Exception as e:
+        logger.warning("failed to list scheduled tasks", error=str(e))
+        raise HTTPException(status_code=503, detail="Scheduler unavailable")
 
 
 @router.post("/scheduler/tasks", response_model=ScheduledTaskResponse, status_code=201)
 async def create_scheduled_task(body: ScheduledTaskCreate) -> ScheduledTaskResponse:
     """Create a new scheduled task."""
-    from scheduler import get_scheduler
+    try:
+        from scheduler import get_scheduler
 
-    task = await get_scheduler().create_task(
-        name=body.name,
-        prompt=body.prompt,
-        trigger_type=body.trigger_type,
-        trigger_args=body.trigger_args,
-        enabled=body.enabled,
-    )
-    return _task_to_response(task)
+        task = await get_scheduler().create_task(
+            name=body.name,
+            prompt=body.prompt,
+            trigger_type=body.trigger_type,
+            trigger_args=body.trigger_args,
+            enabled=body.enabled,
+        )
+        return _task_to_response(task)
+    except Exception as e:
+        logger.warning("failed to create scheduled task", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to create task: {e}")
 
 
 @router.get("/scheduler/tasks/{task_id}", response_model=ScheduledTaskResponse)
