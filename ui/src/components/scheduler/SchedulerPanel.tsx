@@ -38,16 +38,21 @@ function triggerLabel(task: ScheduledTask): string {
   const args = task.trigger_args as Record<string, unknown>;
   if (task.trigger_type === 'interval') {
     if (args.hours) return `every ${args.hours}h`;
-    if (args.minutes) return `every ${args.minutes}m`;
+    if (args.minutes) return `every ${args.minutes}min`;
     if (args.seconds) return `every ${args.seconds}s`;
     return 'interval';
   }
-  // cron
-  const parts = ['minute', 'hour', 'day', 'month', 'day_of_week']
-    .filter((k) => args[k] !== undefined)
-    .map((k) => `${k}=${args[k]}`)
-    .join(' ');
-  return parts || 'cron';
+  // cron -- build a human-readable label
+  const h = args.hour != null ? String(args.hour).padStart(2, '0') : '*';
+  const m = args.minute != null ? String(args.minute).padStart(2, '0') : '00';
+  const dow = args.day_of_week as string | undefined;
+  if (dow) {
+    const dayMap: Record<string, string> = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' };
+    const dayLabel = dayMap[dow] ?? dow;
+    return `${dayLabel} ${h}:${m}`;
+  }
+  if (h !== '*') return `daily ${h}:${m}`;
+  return 'cron';
 }
 
 /* ── Status badge ─────────────────────────────────────────── */
@@ -197,26 +202,65 @@ function TaskCard({
   );
 }
 
+/* ── Shared select style ──────────────────────────────────── */
+
+const selectClass =
+  'rounded border border-surface-700/50 bg-surface-800 px-2 py-1.5 text-xs text-surface-200 outline-none focus:border-primary-600/50 appearance-none cursor-pointer';
+
 /* ── New task form ─────────────────────────────────────────── */
+
+type Frequency = 'minutes' | 'hours' | 'daily' | 'weekly';
+
+const WEEKDAYS = [
+  { value: 'mon', label: 'Monday' },
+  { value: 'tue', label: 'Tuesday' },
+  { value: 'wed', label: 'Wednesday' },
+  { value: 'thu', label: 'Thursday' },
+  { value: 'fri', label: 'Friday' },
+  { value: 'sat', label: 'Saturday' },
+  { value: 'sun', label: 'Sunday' },
+];
+
+function buildTrigger(freq: Frequency, opts: { intervalValue: number; hour: number; minute: number; weekday: string }) {
+  switch (freq) {
+    case 'minutes':
+      return { type: 'interval' as const, args: { minutes: opts.intervalValue } };
+    case 'hours':
+      return { type: 'interval' as const, args: { hours: opts.intervalValue } };
+    case 'daily':
+      return { type: 'cron' as const, args: { hour: opts.hour, minute: opts.minute } };
+    case 'weekly':
+      return { type: 'cron' as const, args: { day_of_week: opts.weekday, hour: opts.hour, minute: opts.minute } };
+  }
+}
+
+function describeSchedule(freq: Frequency, opts: { intervalValue: number; hour: number; minute: number; weekday: string }): string {
+  const hh = String(opts.hour).padStart(2, '0');
+  const mm = String(opts.minute).padStart(2, '0');
+  switch (freq) {
+    case 'minutes':
+      return `Every ${opts.intervalValue} minute${opts.intervalValue !== 1 ? 's' : ''}`;
+    case 'hours':
+      return `Every ${opts.intervalValue} hour${opts.intervalValue !== 1 ? 's' : ''}`;
+    case 'daily':
+      return `Every day at ${hh}:${mm}`;
+    case 'weekly': {
+      const day = WEEKDAYS.find((d) => d.value === opts.weekday)?.label ?? opts.weekday;
+      return `Every ${day} at ${hh}:${mm}`;
+    }
+  }
+}
 
 function NewTaskForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: () => void }) {
   const [name, setName] = useState('');
   const [prompt, setPrompt] = useState('');
-  const [triggerType, setTriggerType] = useState<'interval' | 'cron'>('interval');
-  const [intervalMinutes, setIntervalMinutes] = useState(60);
-  const [cronExpr, setCronExpr] = useState('0 9 * * *');
+  const [frequency, setFrequency] = useState<Frequency>('daily');
+  const [intervalValue, setIntervalValue] = useState(30);
+  const [hour, setHour] = useState(9);
+  const [minute, setMinute] = useState(0);
+  const [weekday, setWeekday] = useState('mon');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const parseCronArgs = (expr: string): Record<string, string> => {
-    const parts = expr.trim().split(/\s+/);
-    const keys = ['minute', 'hour', 'day', 'month', 'day_of_week'];
-    const args: Record<string, string> = {};
-    parts.forEach((v, i) => {
-      if (i < keys.length && v !== '*') args[keys[i]] = v;
-    });
-    return args;
-  };
 
   const handleSubmit = async () => {
     if (!name.trim() || !prompt.trim()) {
@@ -226,16 +270,12 @@ function NewTaskForm({ onCreated, onCancel }: { onCreated: () => void; onCancel:
     setSubmitting(true);
     setError(null);
     try {
-      const triggerArgs =
-        triggerType === 'interval'
-          ? { minutes: intervalMinutes }
-          : parseCronArgs(cronExpr);
-
+      const trigger = buildTrigger(frequency, { intervalValue, hour, minute, weekday });
       await createScheduledTask({
         name: name.trim(),
         prompt: prompt.trim(),
-        trigger_type: triggerType,
-        trigger_args: triggerArgs,
+        trigger_type: trigger.type,
+        trigger_args: trigger.args,
       });
       onCreated();
     } catch (e) {
@@ -272,61 +312,103 @@ function NewTaskForm({ onCreated, onCancel }: { onCreated: () => void; onCancel:
         />
       </div>
 
+      {/* ── Frequency selector ─────────────────────────────── */}
       <div>
         <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-surface-400">
-          Trigger
+          Run
         </label>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setTriggerType('interval')}
-            className={`rounded px-2.5 py-1 text-[11px] font-medium transition-colors ${
-              triggerType === 'interval'
-                ? 'bg-primary-900/50 text-primary-400 ring-1 ring-primary-700/50'
-                : 'text-surface-400 hover:bg-surface-700'
-            }`}
-          >
-            Interval
-          </button>
-          <button
-            onClick={() => setTriggerType('cron')}
-            className={`rounded px-2.5 py-1 text-[11px] font-medium transition-colors ${
-              triggerType === 'cron'
-                ? 'bg-primary-900/50 text-primary-400 ring-1 ring-primary-700/50'
-                : 'text-surface-400 hover:bg-surface-700'
-            }`}
-          >
-            Cron
-          </button>
+        <div className="flex flex-wrap gap-1.5">
+          {([
+            { value: 'minutes', label: 'Every X min' },
+            { value: 'hours', label: 'Every X hours' },
+            { value: 'daily', label: 'Daily' },
+            { value: 'weekly', label: 'Weekly' },
+          ] as const).map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => setFrequency(opt.value)}
+              className={`rounded px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                frequency === opt.value
+                  ? 'bg-primary-900/50 text-primary-400 ring-1 ring-primary-700/50'
+                  : 'text-surface-400 hover:bg-surface-700'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {triggerType === 'interval' ? (
-        <div>
-          <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-surface-400">
-            Every (minutes)
-          </label>
+      {/* ── Interval controls ──────────────────────────────── */}
+      {(frequency === 'minutes' || frequency === 'hours') && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-surface-400">Every</span>
           <input
             type="number"
             min={1}
-            value={intervalMinutes}
-            onChange={(e) => setIntervalMinutes(Math.max(1, parseInt(e.target.value) || 1))}
-            className="w-24 rounded border border-surface-700/50 bg-surface-800 px-2.5 py-1.5 text-xs text-surface-200 outline-none focus:border-primary-600/50"
+            max={frequency === 'minutes' ? 1440 : 168}
+            value={intervalValue}
+            onChange={(e) => setIntervalValue(Math.max(1, parseInt(e.target.value) || 1))}
+            className="w-16 rounded border border-surface-700/50 bg-surface-800 px-2 py-1.5 text-center text-xs text-surface-200 outline-none focus:border-primary-600/50"
           />
-        </div>
-      ) : (
-        <div>
-          <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-surface-400">
-            Cron expression (min hour day month dow)
-          </label>
-          <input
-            value={cronExpr}
-            onChange={(e) => setCronExpr(e.target.value)}
-            placeholder="0 9 * * *"
-            className="w-full rounded border border-surface-700/50 bg-surface-800 px-2.5 py-1.5 font-mono text-xs text-surface-200 outline-none focus:border-primary-600/50"
-          />
-          <p className="mt-0.5 text-[10px] text-surface-500">e.g. "0 9 * * *" = daily at 9 AM</p>
+          <span className="text-xs text-surface-400">
+            {frequency === 'minutes' ? 'minute(s)' : 'hour(s)'}
+          </span>
         </div>
       )}
+
+      {/* ── Day picker (weekly only) ───────────────────────── */}
+      {frequency === 'weekly' && (
+        <div>
+          <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-surface-400">
+            Day
+          </label>
+          <select
+            value={weekday}
+            onChange={(e) => setWeekday(e.target.value)}
+            className={selectClass + ' w-full'}
+          >
+            {WEEKDAYS.map((d) => (
+              <option key={d.value} value={d.value}>{d.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* ── Time picker (daily / weekly) ───────────────────── */}
+      {(frequency === 'daily' || frequency === 'weekly') && (
+        <div>
+          <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-surface-400">
+            At
+          </label>
+          <div className="flex items-center gap-1.5">
+            <select
+              value={hour}
+              onChange={(e) => setHour(parseInt(e.target.value))}
+              className={selectClass + ' w-16 text-center'}
+            >
+              {Array.from({ length: 24 }, (_, i) => (
+                <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
+              ))}
+            </select>
+            <span className="text-xs font-bold text-surface-400">:</span>
+            <select
+              value={minute}
+              onChange={(e) => setMinute(parseInt(e.target.value))}
+              className={selectClass + ' w-16 text-center'}
+            >
+              {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map((m) => (
+                <option key={m} value={m}>{String(m).padStart(2, '0')}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
+
+      {/* ── Preview ────────────────────────────────────────── */}
+      <p className="rounded bg-surface-800/50 px-2.5 py-1.5 text-[11px] text-primary-400">
+        {describeSchedule(frequency, { intervalValue, hour, minute, weekday })}
+      </p>
 
       {error && (
         <div className="flex items-center gap-2 rounded border border-red-800/50 bg-red-950/30 px-2.5 py-1.5">
