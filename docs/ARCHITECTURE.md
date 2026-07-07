@@ -234,14 +234,36 @@ NOVA supports recurring and one-off scheduled tasks via APScheduler.
 
 ## Data Storage Layout
 
+NOVA does **not** use a single database. Each kind of data lives in the store
+best suited to it, and everything is local to the machine (no cloud database).
+
+| Data | Where | Technology | Path | Env override |
+|------|-------|------------|------|--------------|
+| **Chat message history** | JSON file per session (also cached in RAM) | Plain files | `data/sessions/<session_id>.json` | — |
+| **User facts** (name, preferences…) | `facts` table | SQLite (`aiosqlite`) | `data/nova_memory.db` | `MEMORY_DB_PATH` |
+| **Episodic memory** (session summaries) | `episodes` table | SQLite (`aiosqlite`) | `data/nova_memory.db` | `MEMORY_DB_PATH` |
+| **Document metadata** (name, status, chunk count) | `documents` table | SQLite (`aiosqlite`) | `data/nova_memory.db` | `MEMORY_DB_PATH` |
+| **Knowledge base** (RAG chunks + embeddings) | `nova_documents` collection | ChromaDB vector store | `data/chroma/` | `CHROMA_PERSIST_DIR` |
+| **Uploaded source documents** | Raw files | Plain files | `data/uploads/` | — |
+| **Scheduled tasks + run logs** | `scheduled_tasks`, `task_executions` tables | SQLite (`aiosqlite`) | `data/nova_scheduler.db` | `SCHEDULER_DB_PATH` |
+
 ```
 data/
-  nova_memory.db      # Memory facts + episodes (SQLite)
-  nova_scheduler.db   # Scheduler tasks + execution logs (SQLite)
-  chroma/             # ChromaDB vector store (embeddings)
+  sessions/           # Chat message history — one JSON file per session
+  nova_memory.db      # SQLite: facts + episodes + document metadata
+  chroma/             # ChromaDB vector store (RAG embeddings)
   uploads/            # Uploaded documents for RAG ingestion
-  sessions/           # Persisted chat sessions (JSON)
+  nova_scheduler.db   # SQLite: scheduler tasks + execution logs
 ```
+
+**Notes**
+
+- The **chat history sidebar list** (titles, folders) is kept in the browser's
+  `localStorage`; the full message content of each session is what lives in
+  `data/sessions/`. Selecting a session in the UI fetches it via
+  `GET /chat/history/{session_id}`.
+- **Authentication** (production only) is handled by AWS Cognito — NOVA keeps
+  no local user/account database.
 
 ## API Layer
 
