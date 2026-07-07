@@ -16,11 +16,11 @@ import {
   X,
   FolderInput,
   Brain,
-  BookOpen,
   Clock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { getFolderIcon } from '@/components/layout/FolderModal';
+import { useI18n } from '@/lib/i18n';
 
 /* ── Data model ────────────────────────────────────────────── */
 
@@ -78,9 +78,9 @@ interface SidebarProps {
   onDeleteFolder: (id: string) => void;
   onLogout?: () => void;
   onOpenSettings?: () => void;
-  onOpenMemory?: () => void;
-  onOpenKnowledge?: () => void;
+  onOpenIntelligence?: () => void;
   onOpenScheduler?: () => void;
+  onOpenAppSettings?: () => void;
 }
 
 /* ── 3-dot menu ────────────────────────────────────────────── */
@@ -94,6 +94,7 @@ interface ChatMenuProps {
 }
 
 function ChatMenu({ folders, currentFolderId, onRename, onDelete, onMoveToFolder }: ChatMenuProps) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [showFolders, setShowFolders] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -123,12 +124,12 @@ function ChatMenu({ folders, currentFolderId, onRename, onDelete, onMoveToFolder
       </button>
 
       {open && (
-        <div className="absolute right-0 top-6 z-50 w-44 rounded-lg border border-surface-700/50 bg-surface-900 py-1 shadow-xl">
+        <div className="menu-pop absolute right-0 top-6 z-50 w-44 rounded-lg border border-surface-700/50 bg-surface-900 py-1 shadow-xl">
           <button
             onClick={(e) => { e.stopPropagation(); setOpen(false); onRename(); }}
             className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-surface-300 hover:bg-surface-700/50"
           >
-            <Pencil className="h-3 w-3" /> Rename
+            <Pencil className="h-3 w-3" /> {t('sidebar.rename')}
           </button>
 
           {folders.length > 0 && (
@@ -138,7 +139,7 @@ function ChatMenu({ folders, currentFolderId, onRename, onDelete, onMoveToFolder
                 className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-surface-300 hover:bg-surface-700/50"
               >
                 <FolderInput className="h-3 w-3" />
-                <span className="flex-1">Move to folder</span>
+                <span className="flex-1">{t('sidebar.moveToFolder')}</span>
                 <ChevronRight className={`h-3 w-3 transition-transform ${showFolders ? 'rotate-90' : ''}`} />
               </button>
 
@@ -149,7 +150,7 @@ function ChatMenu({ folders, currentFolderId, onRename, onDelete, onMoveToFolder
                       onClick={(e) => { e.stopPropagation(); setOpen(false); onMoveToFolder(null); }}
                       className="flex w-full items-center gap-2 px-3 py-1.5 pl-6 text-left text-[11px] text-surface-400 hover:bg-surface-700/50"
                     >
-                      <X className="h-3 w-3" /> Remove from folder
+                      <X className="h-3 w-3" /> {t('sidebar.removeFromFolder')}
                     </button>
                   )}
                   {folders.map((f) => (
@@ -172,19 +173,19 @@ function ChatMenu({ folders, currentFolderId, onRename, onDelete, onMoveToFolder
 
           {confirmDelete ? (
             <div className="px-3 py-1.5">
-              <p className="mb-1.5 text-[11px] text-surface-300">Delete this chat?</p>
+              <p className="mb-1.5 text-[11px] text-surface-300">{t('sidebar.deleteChatQ')}</p>
               <div className="flex gap-1.5">
                 <button
                   onClick={(e) => { e.stopPropagation(); setOpen(false); setConfirmDelete(false); onDelete(); }}
                   className="flex-1 rounded bg-red-600/80 px-2 py-1 text-[11px] font-medium text-white hover:bg-red-600"
                 >
-                  Delete
+                  {t('sidebar.delete')}
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); setConfirmDelete(false); }}
                   className="flex-1 rounded bg-surface-700/50 px-2 py-1 text-[11px] text-surface-300 hover:bg-surface-700"
                 >
-                  Cancel
+                  {t('sidebar.cancel')}
                 </button>
               </div>
             </div>
@@ -193,7 +194,7 @@ function ChatMenu({ folders, currentFolderId, onRename, onDelete, onMoveToFolder
               onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
               className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-red-400 hover:bg-red-950/30"
             >
-              <Trash2 className="h-3 w-3" /> Delete
+              <Trash2 className="h-3 w-3" /> {t('sidebar.delete')}
             </button>
           )}
         </div>
@@ -294,6 +295,7 @@ function FolderSection({ folder, chats, activeSessionId, allFolders, onSelectSes
   onEditFolder: (folder: ChatFolder) => void;
   onDeleteFolder: (id: string) => void;
 }) {
+  const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -365,18 +367,18 @@ function FolderSection({ folder, chats, activeSessionId, allFolders, onSelectSes
             <MoreHorizontal className="h-3 w-3" />
           </button>
           {menuOpen && (
-            <div className="absolute right-0 top-5 z-50 w-36 rounded-lg border border-surface-700/50 bg-surface-900 py-1 shadow-xl">
+            <div className="menu-pop absolute right-0 top-5 z-50 w-36 rounded-lg border border-surface-700/50 bg-surface-900 py-1 shadow-xl">
               <button
                 onClick={() => { setMenuOpen(false); onEditFolder(folder); }}
                 className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-surface-300 hover:bg-surface-700/50"
               >
-                <Settings className="h-3 w-3" /> Edit folder
+                <Settings className="h-3 w-3" /> {t('sidebar.editFolder')}
               </button>
               <button
                 onClick={() => { setMenuOpen(false); onDeleteFolder(folder.id); }}
                 className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-red-400 hover:bg-red-950/30"
               >
-                <Trash2 className="h-3 w-3" /> Delete folder
+                <Trash2 className="h-3 w-3" /> {t('sidebar.deleteFolder')}
               </button>
             </div>
           )}
@@ -398,7 +400,7 @@ function FolderSection({ folder, chats, activeSessionId, allFolders, onSelectSes
             />
           ))}
           {chats.length === 0 && (
-            <p className="px-2 py-2 text-[10px] text-surface-600">empty</p>
+            <p className="px-2 py-2 text-[10px] text-surface-600">{t('sidebar.empty')}</p>
           )}
         </div>
       )}
@@ -423,11 +425,12 @@ export function Sidebar({
   onDeleteFolder,
   onLogout,
   onOpenSettings,
-  onOpenMemory,
-  onOpenKnowledge,
+  onOpenIntelligence,
   onOpenScheduler,
+  onOpenAppSettings,
 }: SidebarProps) {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const uncategorized = chatHistory.filter((e) => !e.folderId);
 
   // Drop target state for the uncategorized zone (remove from folder)
@@ -475,24 +478,21 @@ export function Sidebar({
       {/* New chat + New folder */}
       <div className="flex gap-1.5 px-3 pt-3">
         <Button variant="primary" size="sm" className="flex-1 gap-1.5" onClick={onNewChat}>
-          <Plus className="h-3.5 w-3.5" /> new_session
+          <Plus className="h-3.5 w-3.5" /> {t('sidebar.newSession')}
         </Button>
-        <Button variant="ghost" size="sm" className="shrink-0 px-2" onClick={onCreateFolder} title="New folder">
+        <Button variant="ghost" size="sm" className="shrink-0 px-2" onClick={onCreateFolder} title={t('sidebar.newFolder')}>
           <FolderPlus className="h-3.5 w-3.5" />
         </Button>
       </div>
 
-      {/* Memory button */}
+      {/* Intelligence + scheduler */}
       <div className="px-3 pt-1.5">
-        <Button variant="ghost" size="sm" className="w-full justify-start gap-1.5 text-surface-400" onClick={onOpenMemory}>
-          <Brain className="h-3.5 w-3.5 text-primary-500" /> memory
-        </Button>
-        <Button variant="ghost" size="sm" className="w-full justify-start gap-1.5 text-surface-400" onClick={onOpenKnowledge}>
-          <BookOpen className="h-3.5 w-3.5 text-primary-500" /> knowledge_base
+        <Button variant="ghost" size="sm" className="w-full justify-start gap-1.5 text-surface-400" onClick={onOpenIntelligence}>
+          <Brain className="h-3.5 w-3.5 text-primary-500" /> {t('sidebar.intelligence')}
         </Button>
         {!import.meta.env.PROD && (
           <Button variant="ghost" size="sm" className="w-full justify-start gap-1.5 text-surface-400" onClick={onOpenScheduler}>
-            <Clock className="h-3.5 w-3.5 text-primary-500" /> scheduler
+            <Clock className="h-3.5 w-3.5 text-primary-500" /> {t('sidebar.scheduler')}
           </Button>
         )}
       </div>
@@ -529,25 +529,25 @@ export function Sidebar({
         >
           {(folders.length > 0 && uncategorized.length > 0) && (
             <h3 className="mb-1 mt-2 text-[10px] font-semibold uppercase tracking-widest text-surface-600">
-              // chats
+              {t('sidebar.chats')}
             </h3>
           )}
           {folders.length === 0 && (
             <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-surface-500">
-              // history
+              {t('sidebar.history')}
             </h3>
           )}
 
           {uncategorized.length === 0 && folders.length === 0 && (
             <p className="px-2 py-4 text-center text-[10px] text-surface-500">
-              no sessions
+              {t('sidebar.noSessions')}
             </p>
           )}
 
           {/* Drop hint when dragging over uncategorized area with folders present */}
           {uncatDragOver && folders.length > 0 && uncategorized.length === 0 && (
             <p className="px-2 py-3 text-center text-[10px] text-surface-400">
-              drop here to remove from folder
+              {t('sidebar.dropToRemove')}
             </p>
           )}
 
@@ -568,6 +568,19 @@ export function Sidebar({
         </div>
       </div>
 
+      {/* App settings (dev-only, bottom-right) */}
+      {!import.meta.env.PROD && (
+        <div className="flex justify-end border-t border-primary-900/30 px-3 py-2">
+          <button
+            onClick={onOpenAppSettings}
+            title={t('sidebar.settings')}
+            className="cursor-pointer rounded-lg p-2 text-surface-500 transition-colors hover:bg-surface-800 hover:text-primary-400"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {/* User profile */}
       {user && (
         <div className="border-t border-primary-900/30 p-3">
@@ -575,7 +588,7 @@ export function Sidebar({
             <button
               onClick={onOpenSettings}
               className="flex shrink-0 cursor-pointer items-center justify-center"
-              title="Profile settings"
+              title={t('sidebar.profile')}
             >
               {user.picture ? (
                 <img
@@ -592,21 +605,21 @@ export function Sidebar({
             <button
               onClick={onOpenSettings}
               className="min-w-0 flex-1 cursor-pointer text-left transition-colors hover:opacity-80"
-              title="Profile settings"
+              title={t('sidebar.profile')}
             >
               <p className="truncate text-xs font-medium text-surface-200">{user.name}</p>
               <p className="truncate text-[10px] text-surface-500">{user.email}</p>
             </button>
             <button
               onClick={onOpenSettings}
-              title="Settings"
+              title={t('sidebar.settings')}
               className="shrink-0 cursor-pointer rounded-lg p-1.5 text-surface-500 transition-colors hover:bg-surface-800 hover:text-primary-400"
             >
               <Settings className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={onLogout}
-              title="Sign out"
+              title={t('sidebar.signOut')}
               className="shrink-0 cursor-pointer rounded-lg p-1.5 text-surface-500 transition-colors hover:bg-surface-800 hover:text-red-400"
             >
               <LogOut className="h-3.5 w-3.5" />
