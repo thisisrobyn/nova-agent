@@ -47,6 +47,35 @@
   }
 }
 
+@layer base {
+  /* Global scrollbar baseline: no native arrow buttons anywhere, thin width,
+     transparent track, subtle thumb. `.scrollbar-thin` (in @layer utilities)
+     overrides this to auto-hide. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  ::-webkit-scrollbar-button,
+  ::-webkit-scrollbar-corner {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: rgba(148, 163, 184, 0.3);
+    border: 2px solid transparent;
+    border-radius: 9999px;
+    background-clip: content-box;
+  }
+}
+
 @layer utilities {
   /* Slightly thicker, auto-hiding overlay scrollbar.
      Hidden when idle; revealed on hover or while `.is-scrolling` is toggled
@@ -57,8 +86,8 @@
     transition: scrollbar-color 0.3s ease;
   }
   .scrollbar-thin::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 9px;
+    height: 9px;
   }
   .scrollbar-thin::-webkit-scrollbar-button {
     display: none;
