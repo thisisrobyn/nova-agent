@@ -30,8 +30,16 @@ from api.schemas import (
     FactResponse,
     HistoryResponse,
     MemoryClearResponse,
+    OllamaCatalogModel,
+    OllamaCatalogResponse,
     OllamaModel,
     OllamaModelsResponse,
+    OllamaPullRequest,
+    OllamaStartResponse,
+    OllamaStatusResponse,
+    ProviderModel,
+    ProviderTestRequest,
+    ProviderTestResponse,
     RoadmapIteration,
     RoadmapIssue,
     RoadmapLabel,
@@ -40,6 +48,8 @@ from api.schemas import (
     ScheduledTaskListResponse,
     ScheduledTaskResponse,
     ScheduledTaskUpdate,
+    SessionListResponse,
+    SessionSummary,
     SettingsResponse,
     SettingsUpdate,
     TaskExecutionListResponse,
@@ -104,6 +114,17 @@ def _persist_session(session_id: str, session: Dict[str, Any]) -> None:
     """Save a session to a JSON file on disk."""
     try:
         _SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+        path = _SESSIONS_DIR / f"{session_id}.json"
+
+        # Preserve the original created_at across updates.
+        created_at = time.time()
+        if path.exists():
+            try:
+                existing = json.loads(path.read_text(encoding="utf-8"))
+                created_at = float(existing.get("created_at", created_at))
+            except Exception:
+                pass
+
         msgs = [_serialize_message(m) for m in session.get("messages", [])]
         payload = {
             "messages": [m for m in msgs if m is not None],
@@ -112,11 +133,55 @@ def _persist_session(session_id: str, session: Dict[str, Any]) -> None:
             "iteration_count": session.get("iteration_count", 0),
             "total_tokens": session.get("total_tokens", 0),
             "token_usage": session.get("token_usage"),
+            "created_at": created_at,
+            "updated_at": time.time(),
         }
-        path = _SESSIONS_DIR / f"{session_id}.json"
         path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     except Exception:
         logger.exception("Failed to persist session %s", session_id)
+
+
+def _derive_session_title(messages: list[dict]) -> str:
+    """Derive a display title from the first user message of a session."""
+    for m in messages:
+        if m.get("type") == "human":
+            content = (m.get("content") or "").strip().replace("\n", " ")
+            if not content:
+                continue
+            return content[:50] + "…" if len(content) > 50 else content
+    return "New chat"
+
+
+def _list_sessions_from_disk() -> list[dict]:
+    """Scan the sessions directory and return summaries, newest first."""
+    sessions: list[dict] = []
+    if not _SESSIONS_DIR.exists():
+        return sessions
+
+    for path in _SESSIONS_DIR.glob("*.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            msgs = data.get("messages", [])
+            # Count only messages the user actually sees (human + non-empty AI).
+            visible = [
+                m for m in msgs
+                if m.get("type") in ("human", "ai") and m.get("content")
+            ]
+            if not visible:
+                continue
+            mtime = path.stat().st_mtime
+            sessions.append({
+                "session_id": path.stem,
+                "title": _derive_session_title(msgs),
+                "message_count": len(visible),
+                "created_at": float(data.get("created_at", mtime)),
+                "updated_at": float(data.get("updated_at", mtime)),
+            })
+        except Exception:
+            logger.exception("Failed to read session file %s", path)
+
+    sessions.sort(key=lambda s: s["updated_at"], reverse=True)
+    return sessions
 
 
 def _load_session_from_disk(session_id: str) -> Dict[str, Any] | None:
@@ -228,6 +293,18 @@ async def chat(request: ChatRequest) -> ChatResponse:
     except Exception as e:
         logger.exception("Chat endpoint error")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/chat/history", response_model=SessionListResponse)
+async def list_sessions() -> SessionListResponse:
+    """List all persisted chat sessions (from disk), newest first.
+
+    This is the source of truth for which conversations exist, so the sidebar
+    can show past chats even on a fresh browser (localStorage only enriches
+    titles and folders).
+    """
+    summaries = _list_sessions_from_disk()
+    return SessionListResponse(sessions=[SessionSummary(**s) for s in summaries])
 
 
 @router.get("/chat/history/{session_id}", response_model=HistoryResponse)
@@ -511,12 +588,18 @@ async def get_settings_endpoint() -> SettingsResponse:
 async def update_settings(body: SettingsUpdate) -> SettingsResponse:
     """Update LLM settings, reinitialize the model, and persist to .env."""
     ok = reinitialize_llm(
+        provider=body.provider,
         model_name=body.model_name,
         temperature=body.temperature,
         ollama_base_url=body.ollama_base_url,
+        openai_api_key=body.openai_api_key,
+        anthropic_api_key=body.anthropic_api_key,
     )
     if not ok:
-        raise HTTPException(status_code=400, detail="Failed to apply settings")
+        raise HTTPException(
+            status_code=400,
+            detail="Failed to apply settings (check the API key / that Ollama is running)",
+        )
     return SettingsResponse(**get_settings())
 
 
@@ -532,6 +615,56 @@ async def get_ollama_models() -> OllamaModelsResponse:
     except Exception as e:
         logger.warning("failed to list Ollama models", error=str(e))
         raise HTTPException(status_code=503, detail="Cannot connect to Ollama")
+
+
+@router.get("/ollama/status", response_model=OllamaStatusResponse)
+async def get_ollama_status() -> OllamaStatusResponse:
+    """Real-time check of whether the local Ollama server is running."""
+    from agent.ollama_service import ollama_status
+
+    return OllamaStatusResponse(**await ollama_status())
+
+
+@router.post("/ollama/start", response_model=OllamaStartResponse)
+async def post_ollama_start() -> OllamaStartResponse:
+    """Best-effort start of the local Ollama server."""
+    from agent.ollama_service import start_ollama
+
+    return OllamaStartResponse(**await start_ollama())
+
+
+@router.get("/ollama/catalog", response_model=OllamaCatalogResponse)
+async def get_ollama_catalog() -> OllamaCatalogResponse:
+    """List known Ollama models with size/provider and download status."""
+    from agent.ollama_service import build_catalog
+
+    catalog = await build_catalog()
+    return OllamaCatalogResponse(models=[OllamaCatalogModel(**m) for m in catalog])
+
+
+@router.post("/ollama/pull")
+async def post_ollama_pull(body: OllamaPullRequest) -> StreamingResponse:
+    """Download an Ollama model, streaming progress as SSE."""
+    from agent.ollama_service import stream_pull
+
+    return StreamingResponse(
+        stream_pull(body.model),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/providers/test", response_model=ProviderTestResponse)
+async def post_provider_test(body: ProviderTestRequest) -> ProviderTestResponse:
+    """Validate an OpenAI/Anthropic API key and list available chat models."""
+    from agent.ollama_service import list_provider_models
+
+    result = await list_provider_models(body.provider, body.api_key)
+    return ProviderTestResponse(
+        valid=result["valid"],
+        models=[ProviderModel(**m) for m in result["models"]],
+        error=result.get("error"),
+    )
 
 
 # ── Memory extraction helper ───────────────────────────────────────

@@ -49,6 +49,22 @@ class HistoryResponse(BaseModel):
     iteration_count: int = 0
 
 
+class SessionSummary(BaseModel):
+    """Lightweight summary of a persisted chat session (for the sidebar list)."""
+
+    session_id: str
+    title: str
+    message_count: int = 0
+    created_at: float = 0.0  # epoch seconds
+    updated_at: float = 0.0  # epoch seconds
+
+
+class SessionListResponse(BaseModel):
+    """List of persisted chat sessions, newest first."""
+
+    sessions: List[SessionSummary] = Field(default_factory=list)
+
+
 class TitleRequest(BaseModel):
     """Request to generate a chat title from the first message."""
 
@@ -79,20 +95,87 @@ class OllamaModelsResponse(BaseModel):
 
 
 class SettingsResponse(BaseModel):
-    """Current LLM configuration (Ollama)."""
+    """Current LLM configuration (provider-aware)."""
 
+    provider: str = "ollama"
     model_name: str = "gemma3:4b"
     temperature: float = 0.7
     ollama_base_url: str = "http://localhost:11434"
     model_tiers: Dict[str, List[str]] = Field(default_factory=dict)
+    openai_key_set: bool = False
+    anthropic_key_set: bool = False
+    openai_key_masked: str = ""
+    anthropic_key_masked: str = ""
 
 
 class SettingsUpdate(BaseModel):
     """Partial update for LLM settings."""
 
+    provider: Optional[str] = None
     model_name: Optional[str] = None
     temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
     ollama_base_url: Optional[str] = None
+    openai_api_key: Optional[str] = None
+    anthropic_api_key: Optional[str] = None
+
+
+class OllamaStatusResponse(BaseModel):
+    """Real-time Ollama reachability."""
+
+    running: bool = False
+    base_url: str = "http://localhost:11434"
+
+
+class OllamaStartResponse(BaseModel):
+    """Result of a best-effort Ollama start."""
+
+    started: bool = False
+    already_running: bool = False
+    error: Optional[str] = None
+
+
+class OllamaCatalogModel(BaseModel):
+    """A downloadable Ollama model with metadata."""
+
+    name: str
+    tier: str = "unknown"
+    provider: str = "Ollama (local)"
+    size_gb: float = 0.0
+    downloaded: bool = False
+
+
+class OllamaCatalogResponse(BaseModel):
+    """Catalogue of known Ollama models."""
+
+    models: List[OllamaCatalogModel] = Field(default_factory=list)
+
+
+class OllamaPullRequest(BaseModel):
+    """Request to download an Ollama model."""
+
+    model: str = Field(..., min_length=1)
+
+
+class ProviderTestRequest(BaseModel):
+    """Validate an API key and list available models."""
+
+    provider: str = Field(..., description="openai | anthropic")
+    api_key: str = Field(..., min_length=1)
+
+
+class ProviderModel(BaseModel):
+    """A cloud-provider chat model."""
+
+    id: str
+    display_name: str = ""
+
+
+class ProviderTestResponse(BaseModel):
+    """Result of an API-key validation."""
+
+    valid: bool = False
+    models: List[ProviderModel] = Field(default_factory=list)
+    error: Optional[str] = None
 
 
 # ── Memory schemas ───────────────────────────────────────────
