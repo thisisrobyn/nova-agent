@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
+import { useI18n } from '@/lib/i18n';
 import {
   getScheduledTasks,
   createScheduledTask,
@@ -23,36 +24,37 @@ import {
 } from '@/lib/api';
 import type { ScheduledTask, TaskExecution } from '@/lib/types';
 
+type TFn = (key: string, vars?: Record<string, string | number>) => string;
+
 /* ── Helpers ──────────────────────────────────────────────── */
 
-function relativeTime(iso: string | null): string {
+function relativeTime(iso: string | null, t: TFn): string {
   if (!iso) return '--';
   const diff = Date.now() - new Date(iso).getTime();
-  if (diff < 60_000) return 'just now';
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
-  return `${Math.floor(diff / 86_400_000)}d ago`;
+  if (diff < 60_000) return t('sched.justNow');
+  if (diff < 3_600_000) return t('sched.minAgo', { n: Math.floor(diff / 60_000) });
+  if (diff < 86_400_000) return t('sched.hourAgo', { n: Math.floor(diff / 3_600_000) });
+  return t('sched.dayAgo', { n: Math.floor(diff / 86_400_000) });
 }
 
-function triggerLabel(task: ScheduledTask): string {
+function triggerLabel(task: ScheduledTask, t: TFn): string {
   const args = task.trigger_args as Record<string, unknown>;
   if (task.trigger_type === 'interval') {
-    if (args.hours) return `every ${args.hours}h`;
-    if (args.minutes) return `every ${args.minutes}min`;
-    if (args.seconds) return `every ${args.seconds}s`;
-    return 'interval';
+    if (args.hours) return t('sched.everyH', { n: String(args.hours) });
+    if (args.minutes) return t('sched.everyMin', { n: String(args.minutes) });
+    if (args.seconds) return t('sched.everyS', { n: String(args.seconds) });
+    return t('sched.interval');
   }
   // cron -- build a human-readable label
   const h = args.hour != null ? String(args.hour).padStart(2, '0') : '*';
   const m = args.minute != null ? String(args.minute).padStart(2, '0') : '00';
   const dow = args.day_of_week as string | undefined;
   if (dow) {
-    const dayMap: Record<string, string> = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' };
-    const dayLabel = dayMap[dow] ?? dow;
+    const dayLabel = t(`sched.${dow}Short`);
     return `${dayLabel} ${h}:${m}`;
   }
-  if (h !== '*') return `daily ${h}:${m}`;
-  return 'cron';
+  if (h !== '*') return t('sched.dailyAt', { time: `${h}:${m}` });
+  return t('sched.cron');
 }
 
 /* ── Status badge ─────────────────────────────────────────── */
@@ -77,6 +79,7 @@ function ExecStatusBadge({ status }: { status: string }) {
 /* ── Execution log viewer ─────────────────────────────────── */
 
 function ExecutionLogs({ taskId }: { taskId: string }) {
+  const { t } = useI18n();
   const [logs, setLogs] = useState<TaskExecution[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -89,7 +92,7 @@ function ExecutionLogs({ taskId }: { taskId: string }) {
   }, [taskId]);
 
   if (loading) return <Loader2 className="mx-auto my-2 h-4 w-4 animate-spin text-surface-500" />;
-  if (logs.length === 0) return <p className="py-2 text-center text-[10px] text-surface-500">No executions yet</p>;
+  if (logs.length === 0) return <p className="py-2 text-center text-[10px] text-surface-500">{t('sched.noExecutions')}</p>;
 
   return (
     <div className="mt-1 space-y-1">
@@ -127,6 +130,7 @@ function TaskCard({
   onToggle: () => void;
   onDelete: () => void;
 }) {
+  const { t } = useI18n();
   const [showLogs, setShowLogs] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -140,7 +144,7 @@ function TaskCard({
               ? 'text-green-400 hover:bg-green-950/30'
               : 'text-surface-500 hover:bg-surface-700'
           }`}
-          title={task.enabled ? 'Pause task' : 'Enable task'}
+          title={task.enabled ? t('sched.pause') : t('sched.enable')}
         >
           {task.enabled ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
         </button>
@@ -151,13 +155,13 @@ function TaskCard({
         </div>
 
         <span className="shrink-0 rounded bg-surface-800 px-1.5 py-0.5 text-[10px] text-surface-400">
-          {triggerLabel(task)}
+          {triggerLabel(task, t)}
         </span>
 
         <button
           onClick={() => setShowLogs(!showLogs)}
           className="rounded p-1 text-surface-500 hover:bg-surface-700 hover:text-surface-300"
-          title="Execution logs"
+          title={t('sched.logs')}
         >
           {showLogs ? <ChevronDown className="h-3 w-3" /> : <History className="h-3 w-3" />}
         </button>
@@ -170,7 +174,7 @@ function TaskCard({
               className="px-1.5 text-red-400 hover:text-red-300"
               onClick={onDelete}
             >
-              Yes
+              {t('sched.yes')}
             </Button>
             <Button
               variant="ghost"
@@ -178,14 +182,14 @@ function TaskCard({
               className="px-1.5"
               onClick={() => setConfirmDelete(false)}
             >
-              No
+              {t('sched.no')}
             </Button>
           </div>
         ) : (
           <button
             onClick={() => setConfirmDelete(true)}
             className="rounded p-1 text-surface-500 hover:bg-surface-700 hover:text-red-400"
-            title="Delete task"
+            title={t('sched.deleteTask')}
           >
             <Trash2 className="h-3 w-3" />
           </button>
@@ -193,8 +197,8 @@ function TaskCard({
       </div>
 
       <div className="mt-1 flex gap-3 text-[10px] text-surface-500">
-        <span>last: {relativeTime(task.last_run_at)}</span>
-        {task.created_at && <span>created: {new Date(task.created_at).toLocaleDateString()}</span>}
+        <span>{t('sched.last', { time: relativeTime(task.last_run_at, t) })}</span>
+        {task.created_at && <span>{t('sched.created', { date: new Date(task.created_at).toLocaleDateString() })}</span>}
       </div>
 
       {showLogs && <ExecutionLogs taskId={task.id} />}
@@ -211,15 +215,7 @@ const selectClass =
 
 type Frequency = 'minutes' | 'hours' | 'daily' | 'weekly';
 
-const WEEKDAYS = [
-  { value: 'mon', label: 'Monday' },
-  { value: 'tue', label: 'Tuesday' },
-  { value: 'wed', label: 'Wednesday' },
-  { value: 'thu', label: 'Thursday' },
-  { value: 'fri', label: 'Friday' },
-  { value: 'sat', label: 'Saturday' },
-  { value: 'sun', label: 'Sunday' },
-];
+const WEEKDAY_VALUES = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
 function buildTrigger(freq: Frequency, opts: { intervalValue: number; hour: number; minute: number; weekday: string }) {
   switch (freq) {
@@ -234,24 +230,26 @@ function buildTrigger(freq: Frequency, opts: { intervalValue: number; hour: numb
   }
 }
 
-function describeSchedule(freq: Frequency, opts: { intervalValue: number; hour: number; minute: number; weekday: string }): string {
-  const hh = String(opts.hour).padStart(2, '0');
-  const mm = String(opts.minute).padStart(2, '0');
+function describeSchedule(
+  freq: Frequency,
+  opts: { intervalValue: number; hour: number; minute: number; weekday: string },
+  t: TFn,
+): string {
+  const time = `${String(opts.hour).padStart(2, '0')}:${String(opts.minute).padStart(2, '0')}`;
   switch (freq) {
     case 'minutes':
-      return `Every ${opts.intervalValue} minute${opts.intervalValue !== 1 ? 's' : ''}`;
+      return t('sched.descMinutes', { n: opts.intervalValue });
     case 'hours':
-      return `Every ${opts.intervalValue} hour${opts.intervalValue !== 1 ? 's' : ''}`;
+      return t('sched.descHours', { n: opts.intervalValue });
     case 'daily':
-      return `Every day at ${hh}:${mm}`;
-    case 'weekly': {
-      const day = WEEKDAYS.find((d) => d.value === opts.weekday)?.label ?? opts.weekday;
-      return `Every ${day} at ${hh}:${mm}`;
-    }
+      return t('sched.descDaily', { time });
+    case 'weekly':
+      return t('sched.descWeekly', { day: t(`sched.${opts.weekday}`), time });
   }
 }
 
 function NewTaskForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: () => void }) {
+  const { t } = useI18n();
   const [name, setName] = useState('');
   const [prompt, setPrompt] = useState('');
   const [frequency, setFrequency] = useState<Frequency>('daily');
@@ -264,7 +262,7 @@ function NewTaskForm({ onCreated, onCancel }: { onCreated: () => void; onCancel:
 
   const handleSubmit = async () => {
     if (!name.trim() || !prompt.trim()) {
-      setError('Name and prompt are required');
+      setError(t('sched.nameRequired'));
       return;
     }
     setSubmitting(true);
@@ -279,7 +277,7 @@ function NewTaskForm({ onCreated, onCancel }: { onCreated: () => void; onCancel:
       });
       onCreated();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create task');
+      setError(e instanceof Error ? e.message : t('sched.createError'));
     } finally {
       setSubmitting(false);
     }
@@ -289,24 +287,24 @@ function NewTaskForm({ onCreated, onCancel }: { onCreated: () => void; onCancel:
     <div className="space-y-3 rounded-lg border border-primary-800/30 bg-primary-950/10 p-3">
       <div>
         <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-surface-400">
-          Name
+          {t('sched.name')}
         </label>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Daily summary"
+          placeholder={t('sched.namePlaceholder')}
           className="w-full rounded border border-surface-700/50 bg-surface-800 px-2.5 py-1.5 text-xs text-surface-200 outline-none focus:border-primary-600/50"
         />
       </div>
 
       <div>
         <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-surface-400">
-          Prompt
+          {t('sched.prompt')}
         </label>
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Summarize today's pending tasks and send a report"
+          placeholder={t('sched.promptPlaceholder')}
           rows={2}
           className="w-full resize-none rounded border border-surface-700/50 bg-surface-800 px-2.5 py-1.5 text-xs text-surface-200 outline-none focus:border-primary-600/50"
         />
@@ -315,14 +313,14 @@ function NewTaskForm({ onCreated, onCancel }: { onCreated: () => void; onCancel:
       {/* ── Frequency selector ─────────────────────────────── */}
       <div>
         <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-surface-400">
-          Run
+          {t('sched.run')}
         </label>
         <div className="flex flex-wrap gap-1.5">
           {([
-            { value: 'minutes', label: 'Every X min' },
-            { value: 'hours', label: 'Every X hours' },
-            { value: 'daily', label: 'Daily' },
-            { value: 'weekly', label: 'Weekly' },
+            { value: 'minutes', label: t('sched.freqMinutes') },
+            { value: 'hours', label: t('sched.freqHours') },
+            { value: 'daily', label: t('sched.freqDaily') },
+            { value: 'weekly', label: t('sched.freqWeekly') },
           ] as const).map((opt) => (
             <button
               key={opt.value}
@@ -342,7 +340,7 @@ function NewTaskForm({ onCreated, onCancel }: { onCreated: () => void; onCancel:
       {/* ── Interval controls ──────────────────────────────── */}
       {(frequency === 'minutes' || frequency === 'hours') && (
         <div className="flex items-center gap-2">
-          <span className="text-xs text-surface-400">Every</span>
+          <span className="text-xs text-surface-400">{t('sched.every')}</span>
           <input
             type="number"
             min={1}
@@ -352,7 +350,7 @@ function NewTaskForm({ onCreated, onCancel }: { onCreated: () => void; onCancel:
             className="w-16 rounded border border-surface-700/50 bg-surface-800 px-2 py-1.5 text-center text-xs text-surface-200 outline-none focus:border-primary-600/50"
           />
           <span className="text-xs text-surface-400">
-            {frequency === 'minutes' ? 'minute(s)' : 'hour(s)'}
+            {frequency === 'minutes' ? t('sched.minutesUnit') : t('sched.hoursUnit')}
           </span>
         </div>
       )}
@@ -361,15 +359,15 @@ function NewTaskForm({ onCreated, onCancel }: { onCreated: () => void; onCancel:
       {frequency === 'weekly' && (
         <div>
           <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-surface-400">
-            Day
+            {t('sched.day')}
           </label>
           <select
             value={weekday}
             onChange={(e) => setWeekday(e.target.value)}
             className={selectClass + ' w-full'}
           >
-            {WEEKDAYS.map((d) => (
-              <option key={d.value} value={d.value}>{d.label}</option>
+            {WEEKDAY_VALUES.map((d) => (
+              <option key={d} value={d}>{t(`sched.${d}`)}</option>
             ))}
           </select>
         </div>
@@ -379,7 +377,7 @@ function NewTaskForm({ onCreated, onCancel }: { onCreated: () => void; onCancel:
       {(frequency === 'daily' || frequency === 'weekly') && (
         <div>
           <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-surface-400">
-            At
+            {t('sched.at')}
           </label>
           <div className="flex items-center gap-1.5">
             <select
@@ -407,7 +405,7 @@ function NewTaskForm({ onCreated, onCancel }: { onCreated: () => void; onCancel:
 
       {/* ── Preview ────────────────────────────────────────── */}
       <p className="rounded bg-surface-800/50 px-2.5 py-1.5 text-[11px] text-primary-400">
-        {describeSchedule(frequency, { intervalValue, hour, minute, weekday })}
+        {describeSchedule(frequency, { intervalValue, hour, minute, weekday }, t)}
       </p>
 
       {error && (
@@ -419,11 +417,11 @@ function NewTaskForm({ onCreated, onCancel }: { onCreated: () => void; onCancel:
 
       <div className="flex justify-end gap-2">
         <Button variant="ghost" size="sm" onClick={onCancel}>
-          Cancel
+          {t('sched.cancel')}
         </Button>
         <Button variant="primary" size="sm" onClick={handleSubmit} disabled={submitting}>
           {submitting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
-          Create
+          {t('sched.create')}
         </Button>
       </div>
     </div>
@@ -438,6 +436,7 @@ interface SchedulerPanelProps {
 }
 
 export function SchedulerPanel({ open, onClose }: SchedulerPanelProps) {
+  const { t } = useI18n();
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -480,13 +479,13 @@ export function SchedulerPanel({ open, onClose }: SchedulerPanelProps) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Scheduled Tasks">
+    <Modal open={open} onClose={onClose} title={t('sched.title')}>
       <div className="max-h-[60vh] space-y-4 overflow-y-auto scrollbar-thin">
         {/* Actions bar */}
         <div className="flex items-center justify-between">
           <h3 className="flex items-center gap-1.5 text-xs font-medium text-surface-300">
             <Clock className="h-3.5 w-3.5 text-primary-500" />
-            Tasks ({tasks.length})
+            {t('sched.tasks', { n: tasks.length })}
           </h3>
           <div className="flex gap-1">
             <Button variant="ghost" size="sm" onClick={loadTasks} disabled={loading}>
@@ -503,7 +502,7 @@ export function SchedulerPanel({ open, onClose }: SchedulerPanelProps) {
               ) : (
                 <Plus className="h-3 w-3" />
               )}
-              {showForm ? 'Hide' : 'New'}
+              {showForm ? t('sched.hide') : t('sched.new')}
             </Button>
           </div>
         </div>
@@ -522,7 +521,7 @@ export function SchedulerPanel({ open, onClose }: SchedulerPanelProps) {
         {/* Task list */}
         {tasks.length === 0 && !loading ? (
           <p className="py-4 text-center text-[11px] text-surface-500">
-            No scheduled tasks yet. Create one to run agent prompts autonomously.
+            {t('sched.empty')}
           </p>
         ) : (
           <div className="space-y-1.5">
