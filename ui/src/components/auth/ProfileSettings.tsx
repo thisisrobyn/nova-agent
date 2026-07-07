@@ -337,7 +337,7 @@ function SecurityTab({
         ) : (
           <form onSubmit={handleDelete} className="space-y-3">
             <p className="text-[10px] text-red-400/80">
-              This action is irreversible. All your data, chat history, and API keys will be permanently deleted.
+              This action is irreversible. All your data and chat history will be permanently deleted.
             </p>
             <input
               type="password"

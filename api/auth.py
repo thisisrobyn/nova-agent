@@ -1,6 +1,6 @@
-"""JWT and API-key authentication for NOVA API.
+"""JWT authentication for NOVA API.
 
-Validates Cognito JWT tokens and nova-sk-* API keys.
+Validates Cognito JWT id_tokens.
 """
 
 from __future__ import annotations
@@ -87,7 +87,7 @@ class AuthenticatedUser:
         self.sub = sub
         self.email = email
         self.name = name
-        self.auth_method = auth_method  # "jwt" or "api_key"
+        self.auth_method = auth_method  # "jwt"
 
 
 async def get_current_user(request: Request) -> AuthenticatedUser:
@@ -95,27 +95,12 @@ async def get_current_user(request: Request) -> AuthenticatedUser:
 
     Supports:
       - Bearer <jwt>       → Cognito id_token
-      - Bearer nova-sk-*   → API key (validated against DynamoDB)
     """
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing Authorization header")
 
     token = auth_header[7:].strip()
-
-    # API key flow
-    if token.startswith("nova-sk-"):
-        from api.db import validate_api_key
-
-        key_data = await validate_api_key(token)
-        if not key_data:
-            raise HTTPException(status_code=401, detail="Invalid or revoked API key")
-        return AuthenticatedUser(
-            sub=key_data["user_id"],
-            email=key_data.get("user_email", ""),
-            name=key_data.get("user_name", "API User"),
-            auth_method="api_key",
-        )
 
     # JWT flow
     payload = await _decode_jwt(token)

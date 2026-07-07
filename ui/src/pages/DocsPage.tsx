@@ -13,7 +13,6 @@ import {
   Database,
   Clock,
   Plug,
-  Key,
   Terminal,
   Zap,
   Menu,
@@ -912,32 +911,6 @@ TAVILY_API_KEY=your-api-key-here`}</CodeBlock>
             ['Framer Motion', 'Animations'],
             ['React Router', 'Client-side routing'],
             ['Lucide React', 'Icon library'],
-          ]}
-        />
-      </>
-    ),
-  },
-
-  /* ─── API Keys ─── */
-  {
-    slug: 'api-keys',
-    title: 'API Keys & Auth',
-    icon: Key,
-    category: 'Reference',
-    content: (
-      <>
-        <H2>API Key Format</H2>
-        <P>
-          NOVA API keys follow the format <code className="text-primary-300">nova-sk-*</code>.
-          Keys are generated and managed through the authentication system.
-        </P>
-
-        <H2>Authentication Flow</H2>
-        <UL
-          items={[
-            'JWT-based authentication for API access',
-            'Optional AWS Cognito integration for user management',
-            'Guest mode available for quick access without registration',
           ]}
         />
       </>
