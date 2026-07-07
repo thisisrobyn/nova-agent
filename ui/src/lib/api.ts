@@ -1,4 +1,4 @@
-import type { ChatResponse, DocumentDeleteResponse, DocumentInfo, DocumentListResponse, EpisodeListResponse, FactListResponse, HistoryResponse, MemoryClearResponse, OllamaModel, ScheduledTask, ScheduledTaskListResponse, SettingsData, StreamEvent, TaskExecutionListResponse, ToolInfo } from './types';
+import type { ChatResponse, DocumentDeleteResponse, DocumentInfo, DocumentListResponse, EpisodeListResponse, FactListResponse, HistoryResponse, MemoryClearResponse, OllamaCatalogModel, OllamaModel, OllamaStatus, ProviderTestResult, PullProgress, ScheduledTask, ScheduledTaskListResponse, SessionSummary, SettingsData, StreamEvent, TaskExecutionListResponse, ToolInfo } from './types';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -16,6 +16,13 @@ export async function sendMessage(
     throw new Error(`API error ${res.status}: ${detail}`);
   }
   return res.json() as Promise<ChatResponse>;
+}
+
+export async function listSessions(): Promise<SessionSummary[]> {
+  const res = await fetch(`${API_BASE}/api/v1/chat/history`);
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  const data = (await res.json()) as { sessions: SessionSummary[] };
+  return data.sessions;
 }
 
 export async function getHistory(
@@ -136,7 +143,14 @@ export async function getSettings(): Promise<SettingsData> {
 }
 
 export async function updateSettings(
-  data: { model_name?: string; temperature?: number; ollama_base_url?: string },
+  data: {
+    provider?: string;
+    model_name?: string;
+    temperature?: number;
+    ollama_base_url?: string;
+    openai_api_key?: string;
+    anthropic_api_key?: string;
+  },
 ): Promise<SettingsData> {
   const res = await fetch(`${API_BASE}/api/v1/settings`, {
     method: 'PUT',
@@ -157,6 +171,72 @@ export async function fetchOllamaModels(): Promise<OllamaModel[]> {
   if (!res.ok) throw new Error(`API error ${res.status}`);
   const data = (await res.json()) as { models: OllamaModel[] };
   return data.models;
+}
+
+export async function getOllamaStatus(): Promise<OllamaStatus> {
+  const res = await fetch(`${API_BASE}/api/v1/ollama/status`);
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json() as Promise<OllamaStatus>;
+}
+
+export async function startOllama(): Promise<{ started: boolean; already_running: boolean; error: string | null }> {
+  const res = await fetch(`${API_BASE}/api/v1/ollama/start`, { method: 'POST' });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json();
+}
+
+export async function getOllamaCatalog(): Promise<OllamaCatalogModel[]> {
+  const res = await fetch(`${API_BASE}/api/v1/ollama/catalog`);
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  const data = (await res.json()) as { models: OllamaCatalogModel[] };
+  return data.models;
+}
+
+export async function testProvider(provider: string, apiKey: string): Promise<ProviderTestResult> {
+  const res = await fetch(`${API_BASE}/api/v1/providers/test`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, api_key: apiKey }),
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`API error ${res.status}: ${detail}`);
+  }
+  return res.json() as Promise<ProviderTestResult>;
+}
+
+/** Download an Ollama model, invoking onProgress for each SSE event. */
+export async function pullOllamaModel(
+  model: string,
+  onProgress: (p: PullProgress) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/v1/ollama/pull`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model }),
+    signal,
+  });
+  if (!res.ok || !res.body) throw new Error(`API error ${res.status}`);
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      try {
+        onProgress(JSON.parse(line.slice(6)) as PullProgress);
+      } catch {
+        /* skip malformed SSE */
+      }
+    }
+  }
 }
 
 /* ── Memory ───────────────────────────────────────────────── */

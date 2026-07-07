@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Paperclip, X, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
+import { useI18n } from '@/lib/i18n';
 import { isSupported, readFile, type FileReadResult } from '@/lib/fileUtils';
 
 interface ChatInputProps {
@@ -19,6 +20,7 @@ export function ChatInput({ onSend, isLoading, externalFiles, onExternalFilesCon
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const { t } = useI18n();
 
   useEffect(() => {
     if (!isLoading) textareaRef.current?.focus();
@@ -63,8 +65,8 @@ export function ChatInput({ onSend, isLoading, externalFiles, onExternalFilesCon
     if (rejected.length > 0) {
       toast(
         rejected.length === 1
-          ? `Unsupported file: ${rejected[0]}`
-          : `${rejected.length} unsupported files`,
+          ? t('chat.unsupportedFile', { name: rejected[0] })
+          : t('chat.unsupportedFiles', { n: rejected.length }),
         'warning',
       );
     }
@@ -151,7 +153,7 @@ export function ChatInput({ onSend, isLoading, externalFiles, onExternalFilesCon
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={isLoading}
-          title="Attach files"
+          title={t('chat.attach')}
           className="mb-1 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-surface-500 transition-colors hover:bg-surface-800 hover:text-primary-400 disabled:opacity-40"
         >
           <Paperclip className="h-4 w-4" />
@@ -165,7 +167,7 @@ export function ChatInput({ onSend, isLoading, externalFiles, onExternalFilesCon
             adjustHeight();
           }}
           onKeyDown={handleKeyDown}
-          placeholder="$ message nova..."
+          placeholder={t('chat.placeholder')}
           rows={2}
           disabled={isLoading || disabled}
           className="flex-1 resize-none bg-transparent py-2 text-sm leading-relaxed text-surface-100 placeholder:text-surface-600 focus:outline-none disabled:opacity-50"

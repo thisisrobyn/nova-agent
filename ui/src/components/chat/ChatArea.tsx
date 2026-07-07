@@ -9,6 +9,7 @@ import { MarkdownRenderer } from '@/components/ui/MarkdownRenderer';
 import { ToolBadge } from './ToolBadge';
 import { GuestBanner } from '@/components/auth/GuestBanner';
 import { useToast } from '@/components/ui/Toast';
+import { useI18n } from '@/lib/i18n';
 import { isSupported, readFile, type FileReadResult } from '@/lib/fileUtils';
 import type { ToolInfo } from '@/lib/types';
 
@@ -63,6 +64,7 @@ export function ChatArea({
   const [droppedFiles, setDroppedFiles] = useState<FileReadResult[]>([]);
   const dragCounter = useRef(0);
   const { toast } = useToast();
+  const { t } = useI18n();
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
   // Show banner after first guest message
@@ -123,8 +125,8 @@ export function ChatArea({
     if (rejected.length > 0) {
       toast(
         rejected.length === 1
-          ? `Unsupported file: ${rejected[0]}`
-          : `${rejected.length} unsupported files`,
+          ? t('chat.unsupportedFile', { name: rejected[0] })
+          : t('chat.unsupportedFiles', { n: rejected.length }),
         'warning',
       );
     }
@@ -132,7 +134,7 @@ export function ChatArea({
     if (newFiles.length) {
       setDroppedFiles(newFiles);
     }
-  }, [toast]);
+  }, [toast, t]);
 
   const handleDroppedFilesConsumed = useCallback(() => {
     setDroppedFiles([]);
@@ -167,10 +169,10 @@ export function ChatArea({
             </motion.div>
             <div className="text-center">
               <p className="text-sm font-semibold text-primary-400 text-glow">
-                drop files here
+                {t('chat.dropFiles')}
               </p>
               <p className="text-xs text-surface-500">
-                attach to conversation
+                {t('chat.dropSub')}
               </p>
             </div>
           </motion.div>
@@ -215,10 +217,10 @@ export function ChatArea({
             <DatabaseZap className="h-8 w-8 text-surface-500" />
             <div className="text-center">
               <p className="text-sm font-medium text-surface-300">
-                Session data unavailable
+                {t('chat.sessionUnavailable')}
               </p>
               <p className="mt-1.5 max-w-xs text-xs text-surface-500">
-                The message history for this conversation could not be recovered. You can start a new message or create a new session.
+                {t('chat.sessionUnavailableDesc')}
               </p>
             </div>
           </motion.div>
@@ -345,7 +347,7 @@ export function ChatArea({
                     className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg bg-red-900/30 px-3 py-1.5 text-xs font-medium text-red-400 transition-colors hover:bg-red-900/50"
                   >
                     <RotateCcw className="h-3 w-3" />
-                    retry
+                    {t('chat.retry')}
                   </button>
                 </motion.div>
               )}

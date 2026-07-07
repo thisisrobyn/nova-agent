@@ -32,15 +32,34 @@ export interface HistoryResponse {
   iteration_count: number;
 }
 
+export interface SessionSummary {
+  session_id: string;
+  title: string;
+  message_count: number;
+  created_at: number; // epoch seconds
+  updated_at: number; // epoch seconds
+}
+
+export interface SessionListResponse {
+  sessions: SessionSummary[];
+}
+
 export type Theme = 'light' | 'dark';
 
 /* ── Settings ─────────────────────────────────────────────── */
 
+export type LLMProvider = 'ollama' | 'openai' | 'anthropic';
+
 export interface SettingsData {
+  provider: LLMProvider;
   model_name: string;
   temperature: number;
   ollama_base_url: string;
   model_tiers: Record<string, string[]>;
+  openai_key_set: boolean;
+  anthropic_key_set: boolean;
+  openai_key_masked: string;
+  anthropic_key_masked: string;
 }
 
 /* ── Ollama models ────────────────────────────────────────── */
@@ -50,6 +69,38 @@ export interface OllamaModel {
   size: number;
   modified_at: string;
   tier: string;
+}
+
+export interface OllamaStatus {
+  running: boolean;
+  base_url: string;
+}
+
+export interface OllamaCatalogModel {
+  name: string;
+  tier: string;
+  provider: string;
+  size_gb: number;
+  downloaded: boolean;
+}
+
+export interface ProviderModel {
+  id: string;
+  display_name: string;
+}
+
+export interface ProviderTestResult {
+  valid: boolean;
+  models: ProviderModel[];
+  error: string | null;
+}
+
+export interface PullProgress {
+  type: 'progress' | 'done' | 'error';
+  status?: string;
+  total?: number;
+  completed?: number;
+  message?: string;
 }
 
 /* ── Stream events ────────────────────────────────────────── */
