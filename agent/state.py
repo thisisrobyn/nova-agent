@@ -17,6 +17,7 @@ class NOVAState(dict):
     __annotations__ = {
         "messages": Annotated[Sequence[BaseMessage], add_messages],
         "memory_context": str,
+        "knowledge_context": str,
         "tool_results": List[Dict[str, Any]],
         "iteration_count": int,
         "total_tokens": int,

@@ -98,7 +98,30 @@ The `documents` table in `nova_memory.db` tracks each uploaded document:
 
 ### Retrieval
 
-The `rag_search` tool queries ChromaDB using similarity search with a score threshold. It returns the top matching chunks along with source information (document name, chunk index).
+Retrieval happens two ways:
+
+1. **Automatic injection (retrieve-then-read)** — On every user turn, the agent
+   (`agent/nodes.py`) runs a similarity search against the knowledge base using
+   the user's message and injects the most relevant excerpts into the system
+   prompt, right after the memory context. This does **not** depend on the LLM
+   deciding to call a tool, so even small local models "see" the user's
+   documents. Chunks farther than `RAG_CONTEXT_MAX_DISTANCE` (cosine distance)
+   are treated as irrelevant and skipped; up to `RAG_CONTEXT_CHUNKS` are
+   injected. When the base is empty, nothing is injected.
+2. **`rag_search` tool** — The agent can also explicitly query the knowledge
+   base for follow-up searches. Returns the top matching chunks with source
+   information (document name, chunk index).
+
+### Configuration
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `RAG_CONTEXT_CHUNKS` | Max excerpts auto-injected per turn | `4` |
+| `RAG_CONTEXT_MAX_DISTANCE` | Max cosine distance (0–2) to count as relevant | `0.6` |
+
+> The default `0.6` is calibrated for `nomic-embed-text`: on-topic questions
+> typically score ~0.4–0.55 while unrelated ones score ~0.6+. Lower it for
+> stricter matching, raise it toward recall if relevant documents are missed.
 
 ### Configuration
 
