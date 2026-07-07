@@ -5,14 +5,14 @@ import { FolderModal } from '@/components/layout/FolderModal';
 import { ChatArea } from '@/components/chat/ChatArea';
 import { AuthScreen } from '@/components/auth/AuthScreen';
 import { ProfileSettings } from '@/components/auth/ProfileSettings';
-import { MemoryManager } from '@/components/memory/MemoryManager';
-import { KnowledgeBase } from '@/components/knowledge/KnowledgeBase';
+import { IntelligencePanel } from '@/components/intelligence/IntelligencePanel';
+import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { SchedulerPanel } from '@/components/scheduler/SchedulerPanel';
 import { ToastProvider } from '@/components/ui/Toast';
 import { useChat } from '@/hooks/useChat';
 import { useAuth } from '@/hooks/useAuth';
 import { generateSessionId } from '@/lib/utils';
-import { generateTitle, clearHistory } from '@/lib/api';
+import { generateTitle, clearHistory, listSessions } from '@/lib/api';
 
 const GUEST_MAX_MESSAGES = 5;
 const HISTORY_STORAGE_KEY = 'nova-chat-history';
@@ -58,8 +58,8 @@ export function ChatPage() {
   const [folders, setFolders] = useState<ChatFolder[]>([]);
   const [showAuth, setShowAuth] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showMemory, setShowMemory] = useState(false);
-  const [showKnowledge, setShowKnowledge] = useState(false);
+  const [showIntelligence, setShowIntelligence] = useState(false);
+  const [showAppSettings, setShowAppSettings] = useState(false);
   const [showScheduler, setShowScheduler] = useState(false);
   const [folderModal, setFolderModal] = useState<{ open: boolean; editing: ChatFolder | null }>({
     open: false,
@@ -71,6 +71,11 @@ export function ChatPage() {
   // In dev mode, skip auth entirely — always show full UI
   const effectiveIsAuthenticated = !import.meta.env.PROD || isAuthenticated;
   const effectiveIsGuest = import.meta.env.PROD ? isGuest : false;
+
+  // Namespace for persisting chat history / folders in localStorage.
+  // In dev mode there is no Cognito user, so fall back to a stable local key
+  // — otherwise the sidebar history would never load or persist.
+  const effectiveUserId = user?.sub ?? (import.meta.env.PROD ? null : 'local-dev');
 
   const sessionJustChanged = useRef(false);
   const titleGeneratedFor = useRef<Set<string>>(new Set());
@@ -105,32 +110,62 @@ export function ChatPage() {
   }, [loadHistory, activeSessionId]);
 
   useEffect(() => {
-    if (isAuthenticated && user) {
-      const savedHistory = loadPersistedHistory(user.sub);
-      if (savedHistory.length > 0) setChatHistory(savedHistory);
-      const savedFolders = loadPersistedFolders(user.sub);
-      if (savedFolders.length > 0) setFolders(savedFolders);
-    }
-  }, [isAuthenticated, user]);
+    if (!effectiveIsAuthenticated || !effectiveUserId) return;
+
+    const savedHistory = loadPersistedHistory(effectiveUserId);
+    const savedFolders = loadPersistedFolders(effectiveUserId);
+    if (savedFolders.length > 0) setFolders(savedFolders);
+
+    // The backend (data/sessions/*.json) is the source of truth for which
+    // chats exist; localStorage only enriches titles (AI-generated) and folders.
+    // Merge both so past chats show up even on a fresh browser.
+    listSessions()
+      .then((sessions) => {
+        const localById = new Map(savedHistory.map((e) => [e.id, e]));
+        const merged: ChatHistoryEntry[] = sessions.map((s) => {
+          const local = localById.get(s.session_id);
+          return {
+            id: s.session_id,
+            title: local?.title ?? s.title,
+            messageCount: s.message_count,
+            createdAt: local?.createdAt ?? Math.round(s.created_at * 1000),
+            folderId: local?.folderId,
+          };
+        });
+        // Keep any local-only entries the backend doesn't know about yet.
+        const diskIds = new Set(sessions.map((s) => s.session_id));
+        const localOnly = savedHistory.filter((e) => !diskIds.has(e.id));
+        // Chats that already exist keep their title forever — mark them as
+        // already-titled so opening them never regenerates a new title.
+        for (const s of sessions) titleGeneratedFor.current.add(s.session_id);
+        for (const e of savedHistory) titleGeneratedFor.current.add(e.id);
+        setChatHistory([...merged, ...localOnly]);
+      })
+      .catch(() => {
+        // Backend unreachable — fall back to local history only.
+        for (const e of savedHistory) titleGeneratedFor.current.add(e.id);
+        if (savedHistory.length > 0) setChatHistory(savedHistory);
+      });
+  }, [effectiveIsAuthenticated, effectiveUserId]);
 
   useEffect(() => {
-    if (isAuthenticated && user && chatHistory.length > 0) {
-      persistHistory(user.sub, chatHistory);
+    if (effectiveIsAuthenticated && effectiveUserId && chatHistory.length > 0) {
+      persistHistory(effectiveUserId, chatHistory);
     }
-  }, [chatHistory, isAuthenticated, user]);
+  }, [chatHistory, effectiveIsAuthenticated, effectiveUserId]);
 
   useEffect(() => {
-    if (isAuthenticated && user) {
-      persistFolders(user.sub, folders);
+    if (effectiveIsAuthenticated && effectiveUserId) {
+      persistFolders(effectiveUserId, folders);
     }
-  }, [folders, isAuthenticated, user]);
+  }, [folders, effectiveIsAuthenticated, effectiveUserId]);
 
   useEffect(() => {
     sessionJustChanged.current = true;
   }, [activeSessionId]);
 
   useEffect(() => {
-    if (!isAuthenticated || messages.length === 0) return;
+    if (!effectiveIsAuthenticated || messages.length === 0) return;
 
     if (sessionJustChanged.current) {
       sessionJustChanged.current = false;
@@ -168,7 +203,7 @@ export function ChatPage() {
         );
       });
     }
-  }, [messages, activeSessionId, isAuthenticated]);
+  }, [messages, activeSessionId, effectiveIsAuthenticated]);
 
   /* ── Session handlers ───────────────────────────────────── */
 
@@ -245,8 +280,8 @@ export function ChatPage() {
 
   const openAuth = useCallback(() => setShowAuth(true), []);
   const openSettings = useCallback(() => setShowSettings(true), []);
-  const openMemory = useCallback(() => setShowMemory(true), []);
-  const openKnowledge = useCallback(() => setShowKnowledge(true), []);
+  const openIntelligence = useCallback(() => setShowIntelligence(true), []);
+  const openAppSettings = useCallback(() => setShowAppSettings(true), []);
   const openScheduler = useCallback(() => setShowScheduler(true), []);
 
   const userMessageCount = messages.filter((m) => m.role === 'user').length;
@@ -322,9 +357,9 @@ export function ChatPage() {
             user={user ? { name: user.name, email: user.email, picture: user.picture } : undefined}
             onLogout={handleLogout}
             onOpenSettings={openSettings}
-            onOpenMemory={openMemory}
-            onOpenKnowledge={openKnowledge}
+            onOpenIntelligence={openIntelligence}
             onOpenScheduler={openScheduler}
+            onOpenAppSettings={openAppSettings}
           />
         )}
 
@@ -335,14 +370,14 @@ export function ChatPage() {
           initial={folderModal.editing}
         />
 
-        <MemoryManager
-          open={showMemory}
-          onClose={() => setShowMemory(false)}
+        <IntelligencePanel
+          open={showIntelligence}
+          onClose={() => setShowIntelligence(false)}
         />
 
-        <KnowledgeBase
-          open={showKnowledge}
-          onClose={() => setShowKnowledge(false)}
+        <SettingsPanel
+          open={showAppSettings}
+          onClose={() => setShowAppSettings(false)}
         />
 
         <SchedulerPanel
