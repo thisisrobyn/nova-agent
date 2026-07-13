@@ -49,27 +49,42 @@
 
 @layer base {
   /* Global scrollbar baseline: no native arrow buttons anywhere, thin width,
-     transparent track, subtle thumb. `.scrollbar-thin` (in @layer utilities)
-     overrides this to auto-hide. */
+     transparent track, brand-green thumb. `.scrollbar-thin` (in @layer
+     utilities) overrides this to auto-hide.
+
+     The arrow-button selectors are duplicated across single/double-button
+     and start/end/increment/decrement variants with !important because
+     Chromium on Windows renders classic (non-overlay) scrollbars by default,
+     and a bare `::-webkit-scrollbar-button { display: none }` alone does not
+     reliably suppress them there. */
   * {
     scrollbar-width: thin;
-    scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+    scrollbar-color: rgba(34, 197, 94, 0.3) transparent;
   }
   ::-webkit-scrollbar {
     width: 9px;
     height: 9px;
   }
   ::-webkit-scrollbar-button,
+  ::-webkit-scrollbar-button:single-button,
+  ::-webkit-scrollbar-button:double-button,
+  ::-webkit-scrollbar-button:vertical:start,
+  ::-webkit-scrollbar-button:vertical:end,
+  ::-webkit-scrollbar-button:horizontal:start,
+  ::-webkit-scrollbar-button:horizontal:end,
+  ::-webkit-scrollbar-button:increment,
+  ::-webkit-scrollbar-button:decrement,
   ::-webkit-scrollbar-corner {
-    display: none;
-    width: 0;
-    height: 0;
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background-color: rgba(148, 163, 184, 0.3);
+    background-color: rgba(34, 197, 94, 0.3);
     border: 2px solid transparent;
     border-radius: 9999px;
     background-clip: content-box;
@@ -89,10 +104,19 @@
     width: 9px;
     height: 9px;
   }
-  .scrollbar-thin::-webkit-scrollbar-button {
-    display: none;
-    width: 0;
-    height: 0;
+  .scrollbar-thin::-webkit-scrollbar-button,
+  .scrollbar-thin::-webkit-scrollbar-button:single-button,
+  .scrollbar-thin::-webkit-scrollbar-button:double-button,
+  .scrollbar-thin::-webkit-scrollbar-button:vertical:start,
+  .scrollbar-thin::-webkit-scrollbar-button:vertical:end,
+  .scrollbar-thin::-webkit-scrollbar-button:horizontal:start,
+  .scrollbar-thin::-webkit-scrollbar-button:horizontal:end,
+  .scrollbar-thin::-webkit-scrollbar-button:increment,
+  .scrollbar-thin::-webkit-scrollbar-button:decrement {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
   }
   .scrollbar-thin::-webkit-scrollbar-track {
     background: transparent;
@@ -106,14 +130,14 @@
   }
   .scrollbar-thin:hover,
   .scrollbar-thin.is-scrolling {
-    scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+    scrollbar-color: rgba(34, 197, 94, 0.4) transparent;
   }
   .scrollbar-thin:hover::-webkit-scrollbar-thumb,
   .scrollbar-thin.is-scrolling::-webkit-scrollbar-thumb {
-    background-color: rgba(148, 163, 184, 0.45);
+    background-color: rgba(34, 197, 94, 0.4);
   }
   .scrollbar-thin:hover::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(148, 163, 184, 0.7);
+    background-color: rgba(34, 197, 94, 0.6);
   }
 
   .code-scroll {
