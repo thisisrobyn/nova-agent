@@ -1,0 +1,95 @@
+{
+  "project_title": "NOVA — Neural Orchestration & Virtual Agent",
+  "project_description": "NOVA (Neural Orchestration & Virtual Agent) is an AI conversational agent built as a master's thesis project. It uses LangGraph for orchestration, Ollama for local LLM inference, FastAPI as backend, and React as frontend. It features autonomous code execution, web search, short/long-term memory with",
+  "project_url": "https://github.com/users/thisisrober/projects/3",
+  "iterations": [
+    {
+      "id": "71c5d0c0",
+      "title": "Q2",
+      "start_date": "2026-05-10",
+      "duration": 52,
+      "end_date": "2026-06-30",
+      "items": [
+        {
+          "title": "Create professional first landing page for AI agent with chatbot color palettes and project board link",
+          "number": 5,
+          "url": "https://github.com/thisisrober/nova-agent/issues/5",
+          "state": "CLOSED",
+          "status": "Done",
+          "priority": "P0",
+          "size": "M",
+          "labels": [
+            {
+              "name": "implementation",
+              "color": "0cafa6"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "7c043575",
+      "title": "Q3",
+      "start_date": "2026-07-01",
+      "duration": 92,
+      "end_date": "2026-09-30",
+      "items": [
+        {
+          "title": "Add MCP integrations for external services",
+          "number": 9,
+          "url": "https://github.com/thisisrober/nova-agent/issues/9",
+          "state": "OPEN",
+          "status": "In progress",
+          "priority": "P0",
+          "size": "M",
+          "labels": [
+            {
+              "name": "implementation",
+              "color": "0cafa6"
+            }
+          ]
+        },
+        {
+          "title": "Introduce multi-agent orchestration architecture (A2A)",
+          "number": 10,
+          "url": "https://github.com/thisisrober/nova-agent/issues/10",
+          "state": "OPEN",
+          "status": "Ready",
+          "priority": "P0",
+          "size": "L",
+          "labels": [
+            {
+              "name": "implementation",
+              "color": "0cafa6"
+            }
+          ]
+        },
+        {
+          "title": "Add real-time voice interaction",
+          "number": 11,
+          "url": "https://github.com/thisisrober/nova-agent/issues/11",
+          "state": "OPEN",
+          "status": "Ready",
+          "priority": "P0",
+          "size": "M",
+          "labels": [
+            {
+              "name": "implementation",
+              "color": "0cafa6"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "1821952a",
+      "title": "Q4",
+      "start_date": "2026-10-01",
+      "duration": 92,
+      "end_date": "2026-12-31",
+      "items": []
+    }
+  ],
+  "backlog": [],
+  "generated_at": "2026-08-02T14:48:55.452419+00:00"
+}

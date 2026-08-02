@@ -35,6 +35,17 @@ jobs:
           cache: npm
           cache-dependency-path: ui/package-lock.json
 
+      - uses: astral-sh/setup-uv@v5
+        if: steps.check.outputs.skip == 'false'
+        with:
+          enable-cache: true
+
+      - name: Refresh roadmap snapshot
+        if: steps.check.outputs.skip == 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.ROADMAP_TOKEN }}
+        run: uv run python scripts/fetch_roadmap.py --allow-failure
+
       - name: Install & build UI
         if: steps.check.outputs.skip == 'false'
         working-directory: ui

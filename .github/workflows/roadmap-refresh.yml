@@ -1,0 +1,43 @@
+name: Refresh Roadmap
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SERVER_IP: ${{ secrets.SERVER_IP }}
+  SERVER_USER: ubuntu
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Generate roadmap snapshot
+        env:
+          GITHUB_TOKEN: ${{ secrets.ROADMAP_TOKEN }}
+        run: uv run python scripts/fetch_roadmap.py
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H $SERVER_IP >> ~/.ssh/known_hosts
+
+      - name: Publish snapshot
+        run: |
+          scp -o StrictHostKeyChecking=no ui/public/roadmap.json \
+            $SERVER_USER@$SERVER_IP:/home/ubuntu/nova-agent-ui/roadmap.json
+          scp -o StrictHostKeyChecking=no ui/public/roadmap.json \
+            $SERVER_USER@$SERVER_IP:/home/ubuntu/thisisrober/projects/nova-agent/roadmap.json

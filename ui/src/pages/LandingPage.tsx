@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useInView } from 'framer-motion';
 import { useRoadmap, type RoadmapIssue, type RoadmapIteration } from '@/hooks/useRoadmap';
 
@@ -293,15 +293,13 @@ function Stat({ value, label, delay = 0 }: { value: string; label: string; delay
 }
 
 /* ─── Status badge colors ─── */
+/* Keyed by the board's Status column, lowercased so renamed casing still matches. */
 const STATUS_COLORS: Record<string, string> = {
-  'Backlog': 'bg-surface-600/50 text-surface-300',
-  'Ready': 'bg-blue-900/40 text-blue-300',
-  'In progress': 'bg-yellow-900/40 text-yellow-300',
-  'In review': 'bg-purple-900/40 text-purple-300',
-  'Done': 'bg-primary-900/40 text-primary-300',
-  'Open': 'bg-blue-900/40 text-blue-300',
-  'OPEN': 'bg-blue-900/40 text-blue-300',
-  'CLOSED': 'bg-primary-900/40 text-primary-300',
+  'backlog': 'bg-surface-600/50 text-surface-300',
+  'ready': 'bg-blue-900/40 text-blue-300',
+  'in progress': 'bg-yellow-900/40 text-yellow-300',
+  'in review': 'bg-purple-900/40 text-purple-300',
+  'done': 'bg-primary-900/40 text-primary-300',
 };
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -313,7 +311,8 @@ const PRIORITY_COLORS: Record<string, string> = {
 
 /* ─── Issue Row ─── */
 function IssueRow({ issue }: { issue: RoadmapIssue }) {
-  const statusClass = STATUS_COLORS[issue.status || ''] || 'bg-surface-600/50 text-surface-300';
+  const statusClass =
+    STATUS_COLORS[(issue.status || '').toLowerCase()] || 'bg-surface-600/50 text-surface-300';
 
   return (
     <a
@@ -377,39 +376,113 @@ function IssueRow({ issue }: { issue: RoadmapIssue }) {
   );
 }
 
-/* ─── Iteration Tab ─── */
-function IterationPanel({ iteration }: { iteration: RoadmapIteration }) {
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '';
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
+/* ─── Iteration date helpers ─── */
+
+type IterationPhase = 'completed' | 'active' | 'upcoming' | 'unknown';
+
+/** Parse an ISO `YYYY-MM-DD` day as UTC so the phase never shifts by timezone. */
+function parseDay(dateStr: string | null): Date | null {
+  if (!dateStr) return null;
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function formatDay(dateStr: string | null, withYear = true): string {
+  const d = parseDay(dateStr);
+  if (!d) return '';
+  return d.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: withYear ? 'numeric' : undefined,
+    timeZone: 'UTC',
+  });
+}
+
+/** "May 10 – Jun 30, 2026", collapsing the year when both ends share it. */
+function formatRange(iteration: RoadmapIteration): string {
+  const start = parseDay(iteration.start_date);
+  const end = parseDay(iteration.end_date);
+  if (!start) return '';
+  if (!end) return formatDay(iteration.start_date);
+  const sameYear = start.getUTCFullYear() === end.getUTCFullYear();
+  return `${formatDay(iteration.start_date, !sameYear)} – ${formatDay(iteration.end_date)}`;
+}
+
+function iterationPhase(iteration: RoadmapIteration, now: Date): IterationPhase {
+  const start = parseDay(iteration.start_date);
+  const end = parseDay(iteration.end_date);
+  if (!start || !end) return 'unknown';
+  if (now < start) return 'upcoming';
+  // `end` is the inclusive last day, so the iteration runs until its midnight.
+  if (now.getTime() >= end.getTime() + 86400000) return 'completed';
+  return 'active';
+}
+
+/** How far through the iteration we are, as a 0–1 fraction. */
+function iterationProgress(iteration: RoadmapIteration, now: Date): number | null {
+  const start = parseDay(iteration.start_date);
+  const end = parseDay(iteration.end_date);
+  if (!start || !end) return null;
+  const total = end.getTime() + 86400000 - start.getTime();
+  if (total <= 0) return null;
+  return Math.min(1, Math.max(0, (now.getTime() - start.getTime()) / total));
+}
+
+const PHASE_LABEL: Record<IterationPhase, string> = {
+  completed: 'Completed',
+  active: 'In progress',
+  upcoming: 'Upcoming',
+  unknown: '',
+};
+
+const PHASE_CLASS: Record<IterationPhase, string> = {
+  completed: 'bg-surface-700/40 text-surface-400',
+  active: 'bg-primary-500/20 text-primary-300',
+  upcoming: 'bg-surface-700/30 text-surface-400',
+  unknown: '',
+};
+
+/* ─── Iteration Panel ─── */
+function IterationPanel({ iteration, now }: { iteration: RoadmapIteration; now: Date }) {
+  const phase = iterationPhase(iteration, now);
+  const range = formatRange(iteration);
+  const progress = phase === 'active' ? iterationProgress(iteration, now) : null;
 
   return (
     <div className="space-y-2">
       {/* Iteration header */}
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
           <span className="text-sm font-medium text-surface-300">
             {iteration.items.length} issue{iteration.items.length !== 1 ? 's' : ''}
           </span>
+          {phase !== 'unknown' && (
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${PHASE_CLASS[phase]}`}>
+              {PHASE_LABEL[phase]}
+            </span>
+          )}
         </div>
-        {iteration.start_date && (
-          <span className="text-xs text-surface-500">
-            {formatDate(iteration.start_date)}
+        {range && (
+          <span className="font-mono text-xs text-surface-500">
+            {range}
             {iteration.duration && (
-              <>
-                {' '}&rarr;{' '}
-                {formatDate(
-                  new Date(
-                    new Date(iteration.start_date).getTime() + iteration.duration * 86400000,
-                  ).toISOString(),
-                )}
-              </>
+              <span className="ml-2 text-surface-600">({iteration.duration}d)</span>
             )}
           </span>
         )}
       </div>
+
+      {/* Progress through the current iteration */}
+      {progress !== null && (
+        <div className="mb-4 h-1 overflow-hidden rounded-full bg-surface-700/40">
+          <motion.div
+            className="h-full rounded-full bg-primary-500/70"
+            initial={{ width: 0 }}
+            animate={{ width: `${progress * 100}%` }}
+            transition={{ duration: 0.6, ease: 'easeOut' }}
+          />
+        </div>
+      )}
 
       {/* Issues */}
       {iteration.items.length === 0 ? (
@@ -426,21 +499,40 @@ function IterationPanel({ iteration }: { iteration: RoadmapIteration }) {
 /* ─── Roadmap Section ─── */
 function RoadmapSection() {
   const { data, loading, error } = useRoadmap();
-  const [activeTab, setActiveTab] = useState(0);
+  const [selectedTab, setSelectedTab] = useState<number | null>(null);
+  // Pinned once per mount so every phase/progress calculation agrees.
+  const [now] = useState(() => new Date());
 
-  // Auto-select the first iteration that has items, or the first one
-  useEffect(() => {
-    if (data && data.iterations.length > 0) {
-      const firstWithItems = data.iterations.findIndex((it) => it.items.length > 0);
-      setActiveTab(firstWithItems >= 0 ? firstWithItems : 0);
-    }
-  }, [data]);
+  // Default to the iteration we are currently in; otherwise the first one
+  // that has items, otherwise the first one. An explicit click wins.
+  const defaultTab = useMemo(() => {
+    if (!data || data.iterations.length === 0) return 0;
+    const current = data.iterations.findIndex((it) => iterationPhase(it, now) === 'active');
+    if (current >= 0) return current;
+    const firstWithItems = data.iterations.findIndex((it) => it.items.length > 0);
+    return firstWithItems >= 0 ? firstWithItems : 0;
+  }, [data, now]);
+
+  const activeTab = selectedTab ?? defaultTab;
+  const setActiveTab = setSelectedTab;
 
   const tabs = data
     ? [
-        ...data.iterations.map((it) => ({ label: it.title, count: it.items.length })),
+        ...data.iterations.map((it) => ({
+          label: it.title,
+          count: it.items.length,
+          range: formatRange(it),
+          phase: iterationPhase(it, now),
+        })),
         ...(data.backlog.length > 0
-          ? [{ label: 'Backlog', count: data.backlog.length }]
+          ? [
+              {
+                label: 'Backlog',
+                count: data.backlog.length,
+                range: 'No iteration',
+                phase: 'unknown' as IterationPhase,
+              },
+            ]
           : []),
       ]
     : [];
@@ -493,21 +585,25 @@ function RoadmapSection() {
               </div>
             ) : data ? (
               <>
-                {/* Tabs */}
+                {/* Quarter selector */}
                 {tabs.length > 0 && (
-                  <div className="flex border-b border-surface-700/30">
+                  <div className="flex flex-wrap items-stretch border-b border-surface-700/30">
                     {tabs.map((tab, i) => (
                       <button
                         key={tab.label}
                         onClick={() => setActiveTab(i)}
-                        className={`cursor-pointer relative px-5 py-3.5 text-sm font-medium transition-colors ${
+                        aria-current={i === activeTab}
+                        className={`cursor-pointer relative px-5 py-3 text-left transition-colors ${
                           i === activeTab
                             ? 'text-primary-300'
                             : 'text-surface-400 hover:text-surface-200'
                         }`}
                       >
-                        <span className="flex items-center gap-2">
+                        <span className="flex items-center gap-2 text-sm font-medium">
                           {tab.label}
+                          {tab.phase === 'active' && (
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary-400 shadow-[0_0_6px] shadow-primary-400" />
+                          )}
                           <span
                             className={`rounded-full px-1.5 py-0.5 text-[10px] ${
                               i === activeTab
@@ -518,6 +614,11 @@ function RoadmapSection() {
                             {tab.count}
                           </span>
                         </span>
+                        {tab.range && (
+                          <span className="mt-0.5 block font-mono text-[10px] text-surface-500">
+                            {tab.range}
+                          </span>
+                        )}
                         {i === activeTab && (
                           <motion.div
                             layoutId="roadmap-tab"
@@ -551,7 +652,7 @@ function RoadmapSection() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.25 }}
                   >
-                    {activePanel && <IterationPanel iteration={activePanel} />}
+                    {activePanel && <IterationPanel iteration={activePanel} now={now} />}
                     {showBacklog && (
                       <div className="space-y-2">
                         <div className="mb-4 text-sm font-medium text-surface-300">

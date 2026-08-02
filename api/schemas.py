@@ -347,6 +347,7 @@ class RoadmapIteration(BaseModel):
     title: str
     start_date: Optional[str] = None
     duration: Optional[int] = None
+    end_date: Optional[str] = None
     items: List[RoadmapIssue] = Field(default_factory=list)
 
 

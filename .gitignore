@@ -23,9 +23,10 @@ data/
 Thumbs.db
 ui-screenshot-local.png
 
-# OpenCode and Speckit
+# AI tools
 .opencode/
 .specify/
-# Ignore specs directory. If it's already tracked, run: git rm -r --cached specs
 specs/
 AGENTS.md
+CLAUDE.md
+.claude/
