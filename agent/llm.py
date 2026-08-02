@@ -89,6 +89,14 @@ KEEP_ALIVE: int = int(os.getenv("NOVA_KEEP_ALIVE", "-1"))
 _DEFAULT_NUM_CTX = 16384
 NUM_CTX: int = int(os.getenv("NOVA_NUM_CTX") or _DEFAULT_NUM_CTX)
 LLM_TIMEOUT: float = float(os.getenv("NOVA_LLM_TIMEOUT", "120"))
+# Thinking/reasoning mode for models that support it (qwen3, deepseek-r1...).
+# "true" forces it on, "false" off, unset leaves the model's own default.
+# Thinking costs seconds per turn but is measurably what makes small models
+# get dates and tool arguments right — disable it only for chat-heavy use.
+_reasoning_env = os.getenv("NOVA_REASONING", "").strip().lower()
+REASONING: bool | None = (
+    True if _reasoning_env == "true" else False if _reasoning_env == "false" else None
+)
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
 
@@ -141,6 +149,8 @@ def _build_ollama_kwargs() -> dict:
         "async_client_kwargs": {"timeout": httpx.Timeout(LLM_TIMEOUT)},
         "num_ctx": NUM_CTX,
     }
+    if REASONING is not None:
+        kwargs["reasoning"] = REASONING
     return kwargs
 
 

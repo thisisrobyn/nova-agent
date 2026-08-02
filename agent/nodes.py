@@ -83,28 +83,38 @@ SYSTEM_PROMPT = (
     "- If a tool returns an error, explain the issue clearly and try an alternative "
     "approach when possible.\n"
     "- Current working directory: {cwd}\n"
-    "- Always respond in the same language the user is using.\n\n"
-    "## Now\n"
-    "Current date and time: {now} ({tz}). Today is {weekday}. Resolve every "
-    "relative date the user mentions against this."
+    "- Always respond in the same language the user is using."
 )
 
 
-def _current_datetime_context() -> dict:
-    """Values for the prompt's ``## Now`` section, recomputed every turn.
+def _now_block() -> str:
+    """The ``## Now`` section: current date/time plus a resolved week table.
 
     Injected instead of relying on the ``get_current_datetime`` tool because
-    small models routinely skip the call and then claim not to know the date —
-    or worse, ask the user what day 'next Thursday' is.
+    small models routinely skip the call and then claim not to know the date.
+    The table removes weekday arithmetic entirely — 'next Thursday' becomes a
+    lookup, which small models get right far more often than a computation.
+
+    Appended at the *end* of the system message on purpose: it changes every
+    minute, and Ollama reuses its KV cache only up to the first changed token.
+    With ~4-5k tokens of tool schemas and instructions ahead of it, keeping
+    the volatile part last saves seconds of prompt re-evaluation per turn.
     """
-    from datetime import datetime
+    from datetime import datetime, timedelta
 
     now = datetime.now().astimezone()
-    return {
-        "now": now.strftime("%Y-%m-%d %H:%M"),
-        "tz": str(now.tzinfo),
-        "weekday": now.strftime("%A"),
-    }
+    week = ", ".join(
+        f"{(now + timedelta(days=i)):%A}={(now + timedelta(days=i)):%Y-%m-%d}"
+        for i in range(1, 8)
+    )
+    return (
+        f"\n\n## Now\n"
+        f"Current date and time: {now:%Y-%m-%d %H:%M} ({now.tzinfo}). "
+        f"Today is {now:%A}.\n"
+        f"The next seven days are: {week}.\n"
+        f"Resolve every relative date against this table — never ask the user "
+        f"what date a weekday falls on."
+    )
 
 
 # ── Knowledge base (RAG) auto-retrieval ──────────────────────────────
@@ -235,13 +245,17 @@ async def agent_node(state: NOVAState, config: RunnableConfig) -> Dict[str, Any]
         logger.warning("connected services context unavailable", exc_info=True)
         services_block = ""
 
-    system_content = SYSTEM_PROMPT.format(cwd=cwd, **_current_datetime_context())
+    # Ordered from most to least stable so Ollama's KV prefix cache survives
+    # as far as possible into the prompt: static instructions, then blocks
+    # that change occasionally, and the per-minute timestamp last.
+    system_content = SYSTEM_PROMPT.format(cwd=cwd)
     if services_block:
         system_content += services_block
     if memory_block:
         system_content += "\n" + memory_block
     if knowledge_block:
         system_content += "\n" + knowledge_block
+    system_content += _now_block()
 
     sys_msg = SystemMessage(content=system_content)
 
