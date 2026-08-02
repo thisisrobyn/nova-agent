@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, type FormEvent, type KeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Paperclip, X, FileText } from 'lucide-react';
+import { Send, Paperclip, X, FileText, Square } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { useI18n } from '@/lib/i18n';
@@ -9,12 +9,14 @@ import { isSupported, readFile, type FileReadResult } from '@/lib/fileUtils';
 interface ChatInputProps {
   onSend: (message: string, files?: FileReadResult[]) => void;
   isLoading: boolean;
+  /** Cancel the in-flight generation. Omit to hide the stop button. */
+  onStop?: () => void;
   externalFiles?: FileReadResult[];
   onExternalFilesConsumed?: () => void;
   disabled?: boolean;
 }
 
-export function ChatInput({ onSend, isLoading, externalFiles, onExternalFilesConsumed, disabled = false }: ChatInputProps) {
+export function ChatInput({ onSend, isLoading, onStop, externalFiles, onExternalFilesConsumed, disabled = false }: ChatInputProps) {
   const [value, setValue] = useState('');
   const [files, setFiles] = useState<FileReadResult[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -173,14 +175,27 @@ export function ChatInput({ onSend, isLoading, externalFiles, onExternalFilesCon
           className="flex-1 resize-none bg-transparent py-2 text-sm leading-relaxed text-surface-100 placeholder:text-surface-600 focus:outline-none disabled:opacity-50"
         />
 
-        <Button
-          type="submit"
-          size="icon"
-          disabled={!hasContent || isLoading || disabled}
-          className="mb-1 shrink-0 rounded-lg"
-        >
-          <Send className="h-4 w-4" />
-        </Button>
+        {/* While generating, the send button becomes a stop button. */}
+        {isLoading && onStop ? (
+          <button
+            type="button"
+            onClick={onStop}
+            title={t('chat.stop')}
+            aria-label={t('chat.stop')}
+            className="mb-1 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-surface-800 text-surface-200 ring-1 ring-surface-600/50 transition-colors hover:bg-red-950/50 hover:text-red-400 hover:ring-red-800/50"
+          >
+            <Square className="h-3.5 w-3.5 fill-current" />
+          </button>
+        ) : (
+          <Button
+            type="submit"
+            size="icon"
+            disabled={!hasContent || isLoading || disabled}
+            className="mb-1 shrink-0 rounded-lg"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        )}
       </div>
     </motion.form>
   );

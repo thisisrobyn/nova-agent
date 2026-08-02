@@ -32,6 +32,7 @@ interface ChatAreaProps {
   streamingTools: ToolInfo[];
   statusMessage: string | null;
   onSend: (message: string, files?: FileReadResult[]) => void;
+  onStop?: () => void;
   onRetry: () => void;
   onEditMessage: (id: string, newContent: string) => void;
   isGuest?: boolean;
@@ -51,6 +52,7 @@ export function ChatArea({
   streamingTools,
   statusMessage,
   onSend,
+  onStop,
   onRetry,
   onEditMessage,
   isGuest = false,
@@ -228,6 +230,7 @@ export function ChatArea({
             <ChatInput
               onSend={onSend}
               isLoading={isLoading}
+              onStop={onStop}
               externalFiles={droppedFiles}
               onExternalFilesConsumed={handleDroppedFilesConsumed}
               disabled={guestLimitReached}
@@ -259,6 +262,7 @@ export function ChatArea({
             <ChatInput
               onSend={onSend}
               isLoading={isLoading}
+              onStop={onStop}
               externalFiles={droppedFiles}
               onExternalFilesConsumed={handleDroppedFilesConsumed}
               disabled={guestLimitReached}
@@ -393,6 +397,7 @@ export function ChatArea({
               <ChatInput
                 onSend={onSend}
                 isLoading={isLoading}
+                onStop={onStop}
                 externalFiles={droppedFiles}
                 onExternalFilesConsumed={handleDroppedFilesConsumed}
                 disabled={guestLimitReached}

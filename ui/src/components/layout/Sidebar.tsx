@@ -17,10 +17,14 @@ import {
   FolderInput,
   Brain,
   Clock,
+  Plug,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { GoogleIcon, MicrosoftIcon, GitHubIcon } from '@/components/ui/BrandIcons';
 import { getFolderIcon } from '@/components/layout/FolderModal';
 import { useI18n } from '@/lib/i18n';
+import { useConnections } from '@/hooks/useConnections';
+import type { ConnectionProvider } from '@/lib/types';
 
 /* ── Data model ────────────────────────────────────────────── */
 
@@ -80,6 +84,7 @@ interface SidebarProps {
   onOpenSettings?: () => void;
   onOpenIntelligence?: () => void;
   onOpenScheduler?: () => void;
+  onOpenConnections?: () => void;
   onOpenAppSettings?: () => void;
 }
 
@@ -408,6 +413,36 @@ function FolderSection({ folder, chats, activeSessionId, allFolders, onSelectSes
   );
 }
 
+/* ── Connection state marks ────────────────────────────────── */
+
+const SERVICE_MARKS: [ConnectionProvider, (p: { className?: string; mono?: boolean }) => React.ReactElement][] = [
+  ['google', GoogleIcon],
+  ['microsoft', MicrosoftIcon],
+  ['github', GitHubIcon],
+];
+
+/** Green when the service is connected, grey when it is not. */
+function ConnectionMarks() {
+  const { connections } = useConnections();
+
+  return (
+    <span className="ml-auto flex items-center gap-1">
+      {SERVICE_MARKS.map(([provider, Icon]) => {
+        const connected = connections.some((c) => c.provider === provider && c.connected);
+        return (
+          <Icon
+            key={provider}
+            mono
+            className={`h-3 w-3 transition-colors ${
+              connected ? 'text-green-500' : 'text-surface-600'
+            }`}
+          />
+        );
+      })}
+    </span>
+  );
+}
+
 /* ── Main Sidebar ──────────────────────────────────────────── */
 
 export function Sidebar({
@@ -427,6 +462,7 @@ export function Sidebar({
   onOpenSettings,
   onOpenIntelligence,
   onOpenScheduler,
+  onOpenConnections,
   onOpenAppSettings,
 }: SidebarProps) {
   const navigate = useNavigate();
@@ -493,6 +529,19 @@ export function Sidebar({
         {!import.meta.env.PROD && (
           <Button variant="ghost" size="sm" className="w-full justify-start gap-1.5 text-surface-400" onClick={onOpenScheduler}>
             <Clock className="h-3.5 w-3.5 text-primary-500" /> {t('sidebar.scheduler')}
+          </Button>
+        )}
+        {!import.meta.env.PROD && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start gap-1.5 text-surface-400"
+            onClick={onOpenConnections}
+            title={t('conn.title')}
+          >
+            <Plug className="h-3.5 w-3.5 text-primary-500" />
+            {t('sidebar.connections')}
+            <ConnectionMarks />
           </Button>
         )}
       </div>
