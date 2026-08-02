@@ -28,6 +28,8 @@ class ChatMessage(BaseModel):
     content: str
     tools_used: List[ToolInfo] = Field(default_factory=list)
     token_usage: Optional[Dict[str, Any]] = None
+    #: Wall-clock seconds the assistant took to produce this message.
+    elapsed_seconds: Optional[float] = None
 
 
 class ChatResponse(BaseModel):

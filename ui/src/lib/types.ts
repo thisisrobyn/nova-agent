@@ -15,6 +15,8 @@ export interface ChatMessage {
   content: string;
   tools_used: ToolInfo[];
   token_usage: TokenUsage | null;
+  /** Wall-clock seconds the assistant took to produce this message. */
+  elapsed_seconds?: number | null;
 }
 
 export interface ChatResponse {

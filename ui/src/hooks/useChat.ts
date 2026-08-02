@@ -289,6 +289,7 @@ export function useChat(sessionId: string) {
           tools_used: m.tools_used,
           token_usage: m.token_usage,
           timestamp: Date.now(),
+          elapsed_seconds: m.elapsed_seconds ?? undefined,
         }));
       setMessages(mapped);
       setTotalTokens(data.total_tokens);

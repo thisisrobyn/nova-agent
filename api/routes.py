@@ -66,6 +66,30 @@ router = APIRouter(prefix="/api/v1")
 _SESSIONS_DIR = Path(__file__).resolve().parent.parent / "data" / "sessions"
 
 
+#: Key under which NOVA stores per-message stats in ``additional_kwargs``.
+#: LangChain round-trips that dict untouched, so it survives graph execution.
+_STATS_KEY = "nova_stats"
+
+
+def _stamp_last_ai_message(state: Dict[str, Any], elapsed: float | None) -> None:
+    """Attach this turn's token usage and duration to its final message.
+
+    The state only remembers the *latest* turn's ``token_usage``; unless it is
+    stamped onto the message itself before persisting, Σ and the response time
+    vanish from every message as soon as a session is reloaded from disk.
+    """
+    for msg in reversed(state.get("messages", [])):
+        if isinstance(msg, AIMessage) and msg.content:
+            stats: dict = {}
+            if state.get("token_usage"):
+                stats["token_usage"] = state["token_usage"]
+            if elapsed is not None:
+                stats["elapsed_seconds"] = elapsed
+            if stats:
+                msg.additional_kwargs[_STATS_KEY] = stats
+            return
+
+
 def _serialize_message(msg) -> dict | None:
     """Convert a LangChain message to a JSON-serializable dict."""
     if isinstance(msg, HumanMessage):
@@ -74,6 +98,9 @@ def _serialize_message(msg) -> dict | None:
         data: dict = {"type": "ai", "content": msg.content}
         if getattr(msg, "tool_calls", None):
             data["tool_calls"] = msg.tool_calls
+        stats = (msg.additional_kwargs or {}).get(_STATS_KEY)
+        if stats:
+            data["stats"] = stats
         return data
     if isinstance(msg, ToolMessage):
         return {
@@ -96,6 +123,8 @@ def _deserialize_message(data: dict):
         msg = AIMessage(content=data["content"])
         if "tool_calls" in data:
             msg.tool_calls = data["tool_calls"]
+        if data.get("stats"):
+            msg.additional_kwargs[_STATS_KEY] = data["stats"]
         return msg
     if t == "tool":
         return ToolMessage(
@@ -342,7 +371,9 @@ async def chat(
     try:
         state = dict(_get_session(request.session_id))
         state["messages"] = _sanitize_history(state.get("messages", []))
+        started = time.monotonic()
         updated_state = await run_agent_once(request.message, state)
+        _stamp_last_ai_message(updated_state, round(time.monotonic() - started, 1))
         _sessions[request.session_id] = updated_state
         _persist_session(request.session_id, updated_state)
 
@@ -381,7 +412,13 @@ async def get_history(session_id: str) -> HistoryResponse:
             messages.append(ChatMessage(role="user", content=content))
         elif isinstance(msg, AIMessage) and msg.content:
             content = msg.content if isinstance(msg.content, str) else str(msg.content)
-            messages.append(ChatMessage(role="assistant", content=content))
+            stats = (msg.additional_kwargs or {}).get(_STATS_KEY, {})
+            messages.append(ChatMessage(
+                role="assistant",
+                content=content,
+                token_usage=stats.get("token_usage"),
+                elapsed_seconds=stats.get("elapsed_seconds"),
+            ))
         elif isinstance(msg, ToolMessage):
             # msg.content can be str or list[dict] (structured MCP content)
             if isinstance(msg.content, str):
@@ -544,6 +581,7 @@ async def _run_langgraph_task(
 
         # Always persist final state (in-memory + disk)
         if final_state:
+            _stamp_last_ai_message(final_state, elapsed)
             _sessions[session_id] = {
                 **final_state,
                 "active_task": None,
