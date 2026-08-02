@@ -71,9 +71,17 @@ def build_manifest(name: str = "NOVA Agent") -> Dict[str, Any]:
         "public": False,
         "default_permissions": _DEFAULT_PERMISSIONS,
         "default_events": [],
-        # NOVA runs its own authorization step from the connections panel.
-        "request_oauth_on_install": False,
+        # A user access token only reaches repositories where the app is
+        # *installed*, so installing must double as authorizing — otherwise
+        # users authorize, never install, and every repo listing comes back
+        # empty. https://docs.github.com/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app
+        "request_oauth_on_install": True,
     }
+
+
+def install_url(app_slug: str) -> str:
+    """Where a user installs the app on their account, granting repo access."""
+    return f"https://github.com/apps/{app_slug}/installations/new"
 
 
 async def convert_manifest_code(code: str) -> Dict[str, Any]:

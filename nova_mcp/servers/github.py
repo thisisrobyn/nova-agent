@@ -32,6 +32,31 @@ _API = "https://api.github.com"
 _HEADERS = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
 
 
+async def _install_hint() -> str:
+    """Explain that the NOVA GitHub App must be installed to see repositories.
+
+    A GitHub App user token only reaches repositories that both the user and
+    an *installation* of the app can access — authorizing alone is not enough.
+    """
+    try:
+        from connections.credentials import get_credentials
+        from connections.github_app import install_url
+
+        creds = await get_credentials(PROVIDER)
+        slug = (creds.extra or {}).get("app_slug") if creds else None
+    except Exception:
+        slug = None
+
+    location = install_url(str(slug)) if slug else "GitHub → Settings → Applications"
+    return (
+        "APP_NOT_INSTALLED: The GitHub account is connected, but the NOVA app "
+        "is not installed on it, so no repositories are visible. Tell the "
+        "user — in their own language — to install the app on their account "
+        f"(choosing which repositories to share) at: {location} , and then "
+        "try again."
+    )
+
+
 async def _get(url: str, params: Dict[str, Any] | None = None) -> Any:
     return await call_api(PROVIDER, "GET", url, params=params, extra_headers=_HEADERS)
 
@@ -55,7 +80,14 @@ async def github_list_repositories(max_results: int = 20, sort: str = "updated")
             params={"per_page": max(1, min(max_results, 50)), "sort": sort},
         )
     except ServiceError as exc:
+        # A 403 here almost always means the app has no installation.
+        if "PERMISSION_DENIED" in str(exc):
+            return await _install_hint()
         return str(exc)
+
+    if not repos:
+        # Empty for a real GitHub account usually means the same thing.
+        return await _install_hint()
 
     lines = [
         f"{r.get('full_name', '?')} ({'private' if r.get('private') else 'public'}) — "
@@ -119,6 +151,39 @@ async def github_get_file(repo: str, path: str, ref: str = "") -> str:
             return f"'{path}' is not a text file."
 
     return f"{repo}/{path}:\n\n{truncate(content, 6000)}"
+
+
+async def github_list_commits(
+    repo: str, max_results: int = 10, branch: str = "", path: str = ""
+) -> str:
+    """List the most recent commits in a GitHub repository.
+
+    Args:
+        repo: Repository in "owner/name" form.
+        max_results: How many commits to return (1-50).
+        branch: Optional branch, tag or SHA. Defaults to the default branch.
+        path: Optional file or directory path to filter commits by.
+    """
+    params: Dict[str, Any] = {"per_page": max(1, min(max_results, 50))}
+    if branch:
+        params["sha"] = branch
+    if path:
+        params["path"] = path
+
+    try:
+        commits = await _get(f"{_API}/repos/{repo}/commits", params=params)
+    except ServiceError as exc:
+        return str(exc)
+
+    lines = []
+    for item in commits or []:
+        commit = item.get("commit", {})
+        author = (commit.get("author") or {}).get("name", "?")
+        date = (commit.get("author") or {}).get("date", "?")
+        message = truncate((commit.get("message") or "").splitlines()[0], 90)
+        lines.append(f"{item.get('sha', '')[:7]} {date} — {author} — {message}")
+
+    return bullet_list(lines, f"No commits found in {repo}.")
 
 
 # ── Issues ───────────────────────────────────────────────────
@@ -273,6 +338,7 @@ TOOLS = [
     github_list_repositories,
     github_create_repository,
     github_get_file,
+    github_list_commits,
     github_list_issues,
     github_get_issue,
     github_create_issue,
