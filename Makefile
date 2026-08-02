@@ -1,4 +1,4 @@
-.PHONY: install setup run ui api dev mcp clean help test
+.PHONY: install setup run ui api dev mcp mcp-google mcp-microsoft mcp-github clean help test
 
 # Cross-platform: use `uv run` instead of hard-coded venv paths
 SHELL_RC  := $(HOME)/.bashrc
@@ -43,6 +43,15 @@ mcp: ## Run the MCP server (stdio)
 
 mcp-http: ## Run the MCP server (HTTP/SSE)
 	@MCP_TRANSPORT=http uv run python -m nova_mcp.server
+
+mcp-google: ## Run the Google MCP server (stdio)
+	@uv run python -m nova_mcp.servers.google
+
+mcp-microsoft: ## Run the Microsoft MCP server (stdio)
+	@uv run python -m nova_mcp.servers.microsoft
+
+mcp-github: ## Run the GitHub MCP server (stdio)
+	@uv run python -m nova_mcp.servers.github
 
 test: ## Run tests
 	@uv run pytest tests/ -v
