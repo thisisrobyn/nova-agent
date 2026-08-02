@@ -22,12 +22,16 @@ def test_llm_default_timeout():
     assert LLM_TIMEOUT == 120.0, f"Expected timeout=120.0, got {LLM_TIMEOUT}"
 
 
-def test_llm_num_ctx_default_none():
-    """When NOVA_NUM_CTX is not set, NUM_CTX should be None."""
+def test_llm_num_ctx_defaults_above_ollama_minimum():
+    """NOVA must ask for a context window large enough for its own prompt.
+
+    Ollama defaults to 2048 tokens, which the system prompt plus the bound
+    tool schemas exhaust on their own — the conversation history then gets
+    silently dropped.
+    """
     from agent.llm import NUM_CTX
-    # Only passes if env var was not set externally
     if not os.getenv("NOVA_NUM_CTX"):
-        assert NUM_CTX is None, f"Expected NUM_CTX=None, got {NUM_CTX}"
+        assert NUM_CTX == 8192, f"Expected NUM_CTX=8192, got {NUM_CTX}"
 
 
 def test_build_ollama_kwargs_has_keep_alive():
@@ -49,12 +53,12 @@ def test_build_ollama_kwargs_has_timeout():
     assert "timeout" in kwargs["async_client_kwargs"]
 
 
-def test_build_ollama_kwargs_omits_num_ctx_when_unset():
-    """_build_ollama_kwargs must NOT include num_ctx when env var is unset."""
+def test_build_ollama_kwargs_always_sets_num_ctx():
+    """num_ctx must always be sent, so Ollama never falls back to its own default."""
     from agent.llm import _build_ollama_kwargs, NUM_CTX
     kwargs = _build_ollama_kwargs()
-    if NUM_CTX is None:
-        assert "num_ctx" not in kwargs
+    assert kwargs.get("num_ctx") == NUM_CTX
+    assert kwargs["num_ctx"] >= 4096
 
 
 def test_build_ollama_kwargs_includes_num_ctx_when_set():
