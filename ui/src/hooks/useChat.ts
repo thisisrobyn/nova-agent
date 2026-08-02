@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { sendMessageStream, getHistory, clearHistory } from '@/lib/api';
+import { sendMessageStream, getHistory, clearHistory, stopGeneration } from '@/lib/api';
 import type { ChatMessage, TokenUsage, ToolInfo } from '@/lib/types';
 
 interface AttachedFile {
@@ -132,6 +132,16 @@ export function useChat(sessionId: string) {
           onDone: (data) => {
             const content = streamRef.current || data.response || '';
 
+            // A generation stopped before it produced anything leaves no
+            // message behind — appending an empty bubble (or worse, a stale
+            // fallback) would look like the agent answered.
+            if (data.cancelled && !content.trim()) {
+              setStreamingContent('');
+              setStreamingTools([]);
+              setStatusMessage(null);
+              return;
+            }
+
             const assistantMsg: DisplayMessage = {
               id: nextId(),
               role: 'assistant',
@@ -155,6 +165,9 @@ export function useChat(sessionId: string) {
           },
           onStatus: (msg) => {
             setStatusMessage(msg);
+          },
+          onCancelled: () => {
+            setStatusMessage(null);
           },
         }, controller.signal);
       } catch (e) {
@@ -180,6 +193,28 @@ export function useChat(sessionId: string) {
     },
     [sessionId],
   );
+
+  /**
+   * Stop the current generation.
+   *
+   * Asks the backend to cancel first and lets the stream finish on its own,
+   * so the partial answer arrives through the normal `done` event and the UI
+   * ends up showing exactly what was persisted. Aborting locally is only the
+   * fallback for when the backend cannot be reached.
+   */
+  const stop = useCallback(async () => {
+    pendingQueueRef.current = [];
+    setStatusMessage(null);
+
+    const stopped = await stopGeneration(sessionId);
+    if (!stopped) {
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+      setIsLoading(false);
+      setStreamingContent('');
+      setStreamingTools([]);
+    }
+  }, [sessionId]);
 
   const send = useCallback(
     async (content: string, files?: AttachedFile[]) => {
@@ -292,6 +327,7 @@ export function useChat(sessionId: string) {
     streamingTools,
     statusMessage,
     send,
+    stop,
     retry,
     editMessage,
     loadHistory,
