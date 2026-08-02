@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from agent.logging_config import configure_logging
 from api.middleware import CorrelationIdMiddleware
 from api.routes import router
+from api.routes_connections import router as connections_router
 
 load_dotenv()
 
@@ -38,6 +39,34 @@ async def lifespan(app: FastAPI):
         await init_memory()
     except Exception as exc:
         logger.error("failed to initialize memory database", error=str(exc))
+
+    # ── Initialize external service connections ───────────────────
+    try:
+        from connections import init_connections_db
+        from connections.admin import owner_sub
+        from connections.store import migrate_local_connections
+
+        await init_connections_db()
+
+        # Connections predating per-user isolation live under a shared "local"
+        # id. Hand them to the configured operator, never to whoever signs in
+        # first, so a public deployment cannot leak them to a stranger.
+        owner = owner_sub()
+        if owner:
+            moved = await migrate_local_connections(owner)
+            if moved:
+                logger.info("claimed pre-isolation connections", count=moved)
+    except Exception as exc:
+        logger.error("failed to initialize connections database", error=str(exc))
+
+    # ── Bind Google / Microsoft / GitHub tools ────────────────────
+    try:
+        from agent.graph import reload_service_tools
+
+        count = await reload_service_tools()
+        logger.info("service tools registered in agent graph", count=count)
+    except Exception as exc:
+        logger.warning("service tools not loaded", error=str(exc))
 
     # ── Load MCP tools ────────────────────────────────────────────
     try:
@@ -100,6 +129,7 @@ def create_app() -> FastAPI:
 
     # ── Routes ────────────────────────────────────────────────────
     application.include_router(router)
+    application.include_router(connections_router)
 
     @application.get("/health")
     async def health() -> dict:
