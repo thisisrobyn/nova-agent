@@ -10,7 +10,7 @@ from typing import Any, Dict
 
 import httpx
 import structlog
-from fastapi import APIRouter, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Query
 from fastapi.responses import StreamingResponse
 from langchain_core.callbacks import AsyncCallbackHandler
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -225,6 +225,65 @@ _sessions: Dict[str, Dict[str, Any]] = {}
 _STREAM_END = object()
 
 
+async def _optional_user(request: Request) -> object | None:
+    """Resolve the caller from the JWT, or None outside authenticated setups.
+
+    The ``Request`` annotation matters: without it FastAPI would treat the
+    parameter as a required query field and reject every call with a 422.
+    """
+    from api.auth import get_optional_user
+
+    return await get_optional_user(request)
+
+
+def _bind_request_identity(user) -> None:
+    """Record who this request acts for, so service tools use *their* tokens.
+
+    The graph runs in a background task; ``asyncio.create_task`` snapshots the
+    context, so setting the ContextVar here covers every tool call the task
+    makes.
+    """
+    from connections.context import set_current_user
+
+    set_current_user(getattr(user, "sub", None))
+
+
+def _sanitize_history(messages: list) -> list:
+    """Drop tool calls that never got a result.
+
+    A turn can end between the model requesting a tool and the tool replying —
+    the user pressed stop, or the process restarted. The leftover assistant
+    message then advertises a call with no matching ``ToolMessage``, which most
+    chat APIs either reject or answer incoherently, so the conversation appears
+    to have lost its memory.
+
+    Assistant messages that also carry text keep it; ones that were nothing but
+    a dangling call are removed entirely.
+    """
+    answered = {
+        msg.tool_call_id
+        for msg in messages
+        if isinstance(msg, ToolMessage) and getattr(msg, "tool_call_id", None)
+    }
+
+    cleaned: list = []
+    for msg in messages:
+        calls = getattr(msg, "tool_calls", None) if isinstance(msg, AIMessage) else None
+        if not calls:
+            cleaned.append(msg)
+            continue
+
+        if all(call.get("id") in answered for call in calls):
+            cleaned.append(msg)
+            continue
+
+        if msg.content:
+            cleaned.append(AIMessage(content=msg.content))
+        logger.info("dropped %d unanswered tool call(s) from history", len(calls))
+
+    return cleaned
+
+
 def _get_session(session_id: str) -> Dict[str, Any]:
     """Return the agent state for a session, creating it if needed.
 
@@ -274,10 +333,15 @@ def _extract_response(state: Dict[str, Any]) -> ChatResponse:
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest) -> ChatResponse:
+async def chat(
+    request: ChatRequest,
+    user=Depends(_optional_user),
+) -> ChatResponse:
     """Send a message to the NOVA agent and get a response."""
+    _bind_request_identity(user)
     try:
-        state = _get_session(request.session_id)
+        state = dict(_get_session(request.session_id))
+        state["messages"] = _sanitize_history(state.get("messages", []))
         updated_state = await run_agent_once(request.message, state)
         _sessions[request.session_id] = updated_state
         _persist_session(request.session_id, updated_state)
@@ -370,10 +434,19 @@ class _TokenStreamHandler(AsyncCallbackHandler):
 
     def __init__(self, buffer: asyncio.Queue) -> None:
         self.buffer = buffer
+        # Kept so a cancelled generation can still be persisted as a partial
+        # assistant message instead of vanishing from the history.
+        self.tokens: list[str] = []
 
     async def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
         if token:
+            self.tokens.append(token)
             await self.buffer.put({"type": "token", "content": token})
+
+    @property
+    def partial_text(self) -> str:
+        """Everything streamed so far this turn."""
+        return "".join(self.tokens)
 
 
 async def _run_langgraph_task(
@@ -394,6 +467,7 @@ async def _run_langgraph_task(
     """
     tools_used: list[dict] = []
     final_state: Dict[str, Any] | None = None
+    cancelled = False
     # Track how many messages we've already seen so we only process new ones
     seen_message_count = len(input_state.get("messages", []))
     start_time = time.monotonic()
@@ -433,6 +507,23 @@ async def _run_langgraph_task(
                         "result": result,
                     })
 
+    except asyncio.CancelledError:
+        # The user pressed stop. Swallowing the cancellation here is
+        # deliberate: the ``finally`` block below still has to persist
+        # whatever was generated and close the SSE stream cleanly.
+        logger.info("generation cancelled by user for session %s", session_id)
+        cancelled = True
+        partial = token_handler.partial_text
+        if partial:
+            # Keep the text the user already saw as a real message, so a
+            # reload of the chat shows the same thing the screen did.
+            target = final_state if final_state is not None else input_state
+            target["messages"] = list(target.get("messages", [])) + [
+                AIMessage(content=partial)
+            ]
+            final_state = target
+        await buffer.put({"type": "cancelled"})
+
     except httpx.TimeoutException:
         logger.warning("LLM request timed out for session %s", session_id)
         await buffer.put({
@@ -461,10 +552,12 @@ async def _run_langgraph_task(
             }
             _persist_session(session_id, _sessions[session_id])
 
-            # Fire-and-forget memory extraction
-            asyncio.create_task(
-                _trigger_memory_extraction(session_id, final_state)
-            )
+            # Fire-and-forget memory extraction. Skipped on cancellation:
+            # a half-finished turn is not worth summarising.
+            if not cancelled:
+                asyncio.create_task(
+                    _trigger_memory_extraction(session_id, final_state)
+                )
         else:
             session = _sessions.get(session_id)
             if session:
@@ -472,9 +565,16 @@ async def _run_langgraph_task(
                 session["response_buffer"] = None
                 session["is_generating"] = False
 
-        # Extract final response text as fallback
+        # Extract final response text as fallback.
+        #
+        # On cancellation this must be *only* what was streamed this turn:
+        # scanning the history for the last AI message would surface the
+        # previous turn's answer, which the UI would then show as the reply to
+        # the message that was just cancelled.
         response_text = ""
-        if final_state:
+        if cancelled:
+            response_text = token_handler.partial_text
+        elif final_state:
             for msg in reversed(final_state.get("messages", [])):
                 if isinstance(msg, AIMessage) and msg.content:
                     response_text = msg.content
@@ -483,6 +583,7 @@ async def _run_langgraph_task(
         await buffer.put(
             {
                 "type": "done",
+                "cancelled": cancelled,
                 "response": response_text,
                 "tools_used": tools_used,
                 "token_usage": (final_state or {}).get("token_usage"),
@@ -495,7 +596,7 @@ async def _run_langgraph_task(
 
 
 @router.post("/chat/stream")
-async def chat_stream(request: ChatRequest):
+async def chat_stream(request: ChatRequest, user=Depends(_optional_user)):
     """Stream the agent response token-by-token via SSE.
 
     The LangGraph execution runs in a background asyncio task that writes
@@ -503,6 +604,7 @@ async def chat_stream(request: ChatRequest):
     If the client disconnects, the background task continues to completion
     and persists the final state (T005).
     """
+    _bind_request_identity(user)
     session = _get_session(request.session_id)
 
     input_state = dict(session)
@@ -511,7 +613,7 @@ async def chat_stream(request: ChatRequest):
     input_state.pop("response_buffer", None)
     input_state.pop("is_generating", None)
 
-    input_state["messages"] = list(session.get("messages", [])) + [
+    input_state["messages"] = _sanitize_history(session.get("messages", [])) + [
         HumanMessage(content=request.message)
     ]
 
@@ -542,6 +644,27 @@ async def chat_stream(request: ChatRequest):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
     )
+
+
+@router.post("/chat/stop/{session_id}")
+async def stop_generation(session_id: str) -> dict:
+    """Cancel the in-flight generation for a session.
+
+    Closing the SSE connection alone does not stop anything — the background
+    task is deliberately detached so a dropped connection does not lose the
+    answer. Stopping therefore has to cancel that task explicitly.
+
+    Whatever was streamed before the stop is kept as a partial assistant
+    message, so the history matches what the user saw on screen.
+    """
+    session = _sessions.get(session_id)
+    task = session.get("active_task") if session else None
+
+    if task is None or task.done():
+        return {"session_id": session_id, "stopped": False}
+
+    task.cancel()
+    return {"session_id": session_id, "stopped": True}
 
 
 # ── Title generation ─────────────────────────────────────────────
