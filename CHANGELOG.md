@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.6.0](https://github.com/thisisrober/nova-agent/compare/v0.5.0...v0.6.0) (2026-08-02)
+
+
+### Features
+
+* add multi-provider llm support with ollama openai and anthropic ([1507ddf](https://github.com/thisisrober/nova-agent/commit/1507ddf7ff06e340e24785a85d46a8b9f76a353e))
+* add session listing and provider settings endpoints ([d43d74a](https://github.com/thisisrober/nova-agent/commit/d43d74ae5df51ff8322ca241b9a6f465fd65b9c2))
+* add settings panel with language switcher and provider selection ([455083e](https://github.com/thisisrober/nova-agent/commit/455083e5fd9673bf5bb6438913ae73a7714101dc))
+* auto-inject knowledge base context into agent turns ([77252e2](https://github.com/thisisrober/nova-agent/commit/77252e22e795127e381f46c553cd8b313e7bc2ce))
+* translate scheduled tasks panel ([f095708](https://github.com/thisisrober/nova-agent/commit/f0957080376a46c7f9fb691ad7d9b2e32d6da1f3))
+* unify memory and knowledge base into intelligence panel ([85511ad](https://github.com/thisisrober/nova-agent/commit/85511ad3be024da7fada79b47c1141f4ad20e60e))
+* unify sidebar navigation with intelligence and settings ([7b0e7a7](https://github.com/thisisrober/nova-agent/commit/7b0e7a77979c624429bad016be61de311434d17d))
+
+
+### Bug Fixes
+
+* created snapshot for better view the roadmap on public landing page ([29fd688](https://github.com/thisisrober/nova-agent/commit/29fd688b4f5cdc7b858feff0e21967db9c1b314d))
+* hide native scrollbar arrows across the ui ([280ed58](https://github.com/thisisrober/nova-agent/commit/280ed58908033795940a19c217e4083c6796197e))
+* load chat history from disk and keep chat titles stable ([7b3b34d](https://github.com/thisisrober/nova-agent/commit/7b3b34d8c7dc7374d1f8bcac0509074c74a97d49))
+* restore brand green scrollbar color and robustly hide arrows ([c507cc5](https://github.com/thisisrober/nova-agent/commit/c507cc5f9cb8881e05ec2d5a924cb6946e453a61))
+
+
+### Documentation
+
+* document data storage layout ([31e2755](https://github.com/thisisrober/nova-agent/commit/31e275541aaeec5eb9e04726ac2d1330a81ebda6))
+
 ## [0.5.0](https://github.com/thisisrober/nova-agent/compare/v0.4.0...v0.5.0) (2026-05-10)
 
 
