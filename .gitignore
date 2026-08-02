@@ -2,6 +2,9 @@ __pypackages__/
 .venv/
 .venv-wsl/
 .env
+# Backups and per-environment overrides hold the same secrets as .env.
+.env.*
+!.env.example
 *.pyc
 __pycache__/
 
