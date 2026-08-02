@@ -80,13 +80,13 @@ OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 MODEL_NAME: str = os.getenv("NOVA_MODEL_NAME", "gemma3:4b")
 TEMPERATURE: float = float(os.getenv("NOVA_TEMPERATURE", "0.7"))
 KEEP_ALIVE: int = int(os.getenv("NOVA_KEEP_ALIVE", "-1"))
-# Ollama defaults to a very small context window (2048 tokens on most models).
-# NOVA binds a system prompt plus a few dozen tool schemas, which on its own
-# overflows that budget: the conversation history — and eventually the system
-# prompt itself — get silently dropped, so the model forgets who it is and what
-# was said a message ago. Ask for a window that leaves room for the actual
-# conversation, and let deployments tune it for their hardware.
-_DEFAULT_NUM_CTX = 8192
+# Ollama defaults to a very small context window (2048 tokens on most models),
+# and NOVA's system prompt plus ~40 tool schemas exceed even 8192: Ollama then
+# truncates from the top, the model loses its instructions and tool definitions,
+# and starts inventing pseudo-tools ("google:calendar:create event") with
+# hallucinated dates. Empirically, with every service connected the same
+# request that fails at 8192 produces a perfect tool call at 16384.
+_DEFAULT_NUM_CTX = 16384
 NUM_CTX: int = int(os.getenv("NOVA_NUM_CTX") or _DEFAULT_NUM_CTX)
 LLM_TIMEOUT: float = float(os.getenv("NOVA_LLM_TIMEOUT", "120"))
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")

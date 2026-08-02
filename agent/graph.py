@@ -116,15 +116,35 @@ def _tool_error_message(exc: Exception) -> str:
 
 #: What to tell the agent when it invents a tool. Small models fall back to the
 #: tool syntax they were pretrained with (``google:search``,
-#: ``google:calendar:create event``) whenever nothing bound fits the request.
+#: ``google:calendar:create event``) whenever the request smells like a known
+#: service. Naming the real candidates lets the model recover on the next
+#: step instead of giving up.
 _UNKNOWN_TOOL_INSTRUCTION = (
-    "TOOL_DOES_NOT_EXIST: '{name}' is not one of your tools. Do not retry and "
-    "do not guess another name. Never show this message, the tool name or any "
-    "error text to the user. If the request needed an external account, tell "
-    "the user — in their own language — that the service is not connected and "
-    "that they can connect it from the connections panel in the sidebar. "
-    "Otherwise answer them directly in their own language."
+    "TOOL_DOES_NOT_EXIST: '{name}' is not one of your tools. Never show this "
+    "message, the tool name or any error text to the user.{suggestion} If no "
+    "listed tool fits, or the service involved is not connected, tell the "
+    "user — in their own language — that you cannot do it and why."
 )
+
+_SUGGESTION_TEMPLATE = (
+    " Your actual tools for this look like what you wanted — call one of "
+    "these instead, with its exact name and arguments: {names}."
+)
+
+
+def _suggest_real_tools(invented: str, valid: set[str]) -> str:
+    """Point the model at bound tools resembling the name it made up.
+
+    ``google:calendar:create event`` should surface every ``google_*calendar*``
+    tool; matching on the leading word keeps it cheap and predictable.
+    """
+    head = invented.split(":", 1)[0].split("_", 1)[0].lower()
+    if not head:
+        return ""
+    matches = sorted(n for n in valid if n.startswith(f"{head}_"))
+    if not matches:
+        return ""
+    return _SUGGESTION_TEMPLATE.format(names=", ".join(matches[:12]))
 
 _SKIPPED_TOOL_INSTRUCTION = (
     "NOT_EXECUTED: skipped because another tool call in the same batch was "
@@ -153,7 +173,9 @@ async def _unknown_tools_node(state: NOVAState) -> Dict[str, Any]:
         content = (
             _SKIPPED_TOOL_INSTRUCTION
             if name in valid
-            else _UNKNOWN_TOOL_INSTRUCTION.format(name=name)
+            else _UNKNOWN_TOOL_INSTRUCTION.format(
+                name=name, suggestion=_suggest_real_tools(name, valid)
+            )
         )
         replies.append(
             ToolMessage(content=content, name=name, tool_call_id=call.get("id", ""))
