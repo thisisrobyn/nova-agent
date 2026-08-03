@@ -206,7 +206,14 @@ async def agent_node(state: NOVAState, config: RunnableConfig) -> Dict[str, Any]
     """
     llm = get_llm()
     if llm is None:
-        fallback = AIMessage(content="Error: LLM not configured. Check that Ollama is running.")
+        from agent.llm import PROVIDER
+
+        hint = (
+            "Check that Ollama is running."
+            if PROVIDER == "ollama"
+            else f"Check the {PROVIDER} API key in Settings."
+        )
+        fallback = AIMessage(content=f"Error: LLM not configured. {hint}")
         return {"messages": [fallback]}
 
     # Import tools here to avoid circular imports

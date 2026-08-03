@@ -233,7 +233,7 @@ export async function getOllamaCatalog(): Promise<OllamaCatalogModel[]> {
   return data.models;
 }
 
-export async function testProvider(provider: string, apiKey: string): Promise<ProviderTestResult> {
+export async function testProvider(provider: string, apiKey?: string): Promise<ProviderTestResult> {
   const res = await fetch(`${API_BASE}/api/v1/providers/test`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -79,7 +79,7 @@ def _stamp_last_ai_message(state: Dict[str, Any], elapsed: float | None) -> None
     vanish from every message as soon as a session is reloaded from disk.
     """
     for msg in reversed(state.get("messages", [])):
-        if isinstance(msg, AIMessage) and msg.content:
+        if isinstance(msg, AIMessage) and _content_to_text(msg.content):
             stats: dict = {}
             if state.get("token_usage"):
                 stats["token_usage"] = state["token_usage"]
@@ -88,6 +88,27 @@ def _stamp_last_ai_message(state: Dict[str, Any], elapsed: float | None) -> None
             if stats:
                 msg.additional_kwargs[_STATS_KEY] = stats
             return
+
+
+def _content_to_text(content) -> str:
+    """Flatten a LangChain message ``content`` into plain display text.
+
+    Models that emit structured content (reasoning models, MCP tool calls) set
+    ``content`` to a list of blocks — ``thinking``, ``tool_use``, ``text`` — and
+    stringifying that list leaks a Python repr into the chat. Only the ``text``
+    blocks are meant for the user; the rest is surfaced through ``tool_calls``.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict) and block.get("type", "text") == "text":
+                parts.append(block.get("text", ""))
+        return "".join(parts).strip()
+    return "" if content is None else str(content)
 
 
 def _serialize_message(msg) -> dict | None:
@@ -172,7 +193,7 @@ def _derive_session_title(messages: list[dict]) -> str:
     """Derive a display title from the first user message of a session."""
     for m in messages:
         if m.get("type") == "human":
-            content = (m.get("content") or "").strip().replace("\n", " ")
+            content = _content_to_text(m.get("content")).strip().replace("\n", " ")
             if not content:
                 continue
             return content[:50] + "…" if len(content) > 50 else content
@@ -192,7 +213,7 @@ def _list_sessions_from_disk() -> list[dict]:
             # Count only messages the user actually sees (human + non-empty AI).
             visible = [
                 m for m in msgs
-                if m.get("type") in ("human", "ai") and m.get("content")
+                if m.get("type") in ("human", "ai") and _content_to_text(m.get("content"))
             ]
             if not visible:
                 continue
@@ -306,8 +327,9 @@ def _sanitize_history(messages: list) -> list:
             cleaned.append(msg)
             continue
 
-        if msg.content:
-            cleaned.append(AIMessage(content=msg.content))
+        text = _content_to_text(msg.content)
+        if text:
+            cleaned.append(AIMessage(content=text))
         logger.info("dropped %d unanswered tool call(s) from history", len(calls))
 
     return cleaned
@@ -348,9 +370,13 @@ def _extract_response(state: Dict[str, Any]) -> ChatResponse:
 
     for msg in messages:
         if isinstance(msg, ToolMessage):
-            tools_used.append(ToolInfo(name=msg.name or "unknown", result=msg.content[:200]))
-        if isinstance(msg, AIMessage) and msg.content:
-            response_text = msg.content
+            tools_used.append(
+                ToolInfo(name=msg.name or "unknown", result=_content_to_text(msg.content)[:200])
+            )
+        if isinstance(msg, AIMessage):
+            text = _content_to_text(msg.content)
+            if text:
+                response_text = text
 
     return ChatResponse(
         response=response_text,
@@ -406,34 +432,33 @@ async def get_history(session_id: str) -> HistoryResponse:
     state = _get_session(session_id)
     messages: list[ChatMessage] = []
 
+    # Tools run *before* the assistant text that reports on them, so they are
+    # buffered and attached to that message — the UI shows tool chips inline and
+    # drops standalone tool rows.
+    pending_tools: list[ToolInfo] = []
+
     for msg in state.get("messages", []):
         if isinstance(msg, HumanMessage):
-            content = msg.content if isinstance(msg.content, str) else str(msg.content)
-            messages.append(ChatMessage(role="user", content=content))
-        elif isinstance(msg, AIMessage) and msg.content:
-            content = msg.content if isinstance(msg.content, str) else str(msg.content)
+            messages.append(ChatMessage(role="user", content=_content_to_text(msg.content)))
+        elif isinstance(msg, AIMessage):
+            content = _content_to_text(msg.content)
+            if not content:
+                # Pure tool-call / reasoning turn: nothing for the user to read.
+                continue
             stats = (msg.additional_kwargs or {}).get(_STATS_KEY, {})
             messages.append(ChatMessage(
                 role="assistant",
                 content=content,
+                tools_used=pending_tools,
                 token_usage=stats.get("token_usage"),
                 elapsed_seconds=stats.get("elapsed_seconds"),
             ))
+            pending_tools = []
         elif isinstance(msg, ToolMessage):
-            # msg.content can be str or list[dict] (structured MCP content)
-            if isinstance(msg.content, str):
-                text = msg.content[:200]
-            elif isinstance(msg.content, list):
-                text = " ".join(
-                    item.get("text", "") for item in msg.content if isinstance(item, dict)
-                )[:200]
-            else:
-                text = str(msg.content)[:200]
-            messages.append(ChatMessage(
-                role="tool",
-                content=text,
-                tools_used=[ToolInfo(name=msg.name or "unknown", result=text)],
-            ))
+            text = _content_to_text(msg.content)[:200]
+            info = ToolInfo(name=msg.name or "unknown", result=text)
+            pending_tools.append(info)
+            messages.append(ChatMessage(role="tool", content=text, tools_used=[info]))
 
     return HistoryResponse(
         session_id=session_id,

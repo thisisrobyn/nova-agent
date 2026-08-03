@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   MessageSquare,
@@ -24,6 +24,7 @@ import { GoogleIcon, MicrosoftIcon, GitHubIcon } from '@/components/ui/BrandIcon
 import { getFolderIcon } from '@/components/layout/FolderModal';
 import { useI18n } from '@/lib/i18n';
 import { useConnections } from '@/hooks/useConnections';
+import { useRunningSessions } from '@/hooks/useRunningSessions';
 import type { ConnectionProvider } from '@/lib/types';
 
 /* ── Data model ────────────────────────────────────────────── */
@@ -241,15 +242,17 @@ function InlineRename({ value, onConfirm, onCancel }: {
 
 /* ── Chat card (draggable) ─────────────────────────────────── */
 
-function ChatCard({ entry, isActive, folders, onSelect, onDelete, onRename, onMoveToFolder }: {
+function ChatCard({ entry, isActive, isRunning, folders, onSelect, onDelete, onRename, onMoveToFolder }: {
   entry: ChatHistoryEntry;
   isActive: boolean;
+  isRunning?: boolean;
   folders: ChatFolder[];
   onSelect: () => void;
   onDelete: () => void;
   onRename: (newTitle: string) => void;
   onMoveToFolder: (folderId: string | null) => void;
 }) {
+  const { t } = useI18n();
   const [renaming, setRenaming] = useState(false);
 
   return (
@@ -273,6 +276,15 @@ function ChatCard({ entry, isActive, folders, onSelect, onDelete, onRename, onMo
       ) : (
         <span className="line-clamp-2 flex-1">{entry.title}</span>
       )}
+      {isRunning && (
+        <span
+          className="flex shrink-0 items-center"
+          title={t('sidebar.generating')}
+          aria-label={t('sidebar.generating')}
+        >
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary-500 shadow-[0_0_6px_var(--color-primary-500)]" />
+        </span>
+      )}
       {!renaming && (
         <ChatMenu
           folders={folders}
@@ -288,10 +300,11 @@ function ChatCard({ entry, isActive, folders, onSelect, onDelete, onRename, onMo
 
 /* ── Folder section (drop target) ──────────────────────────── */
 
-function FolderSection({ folder, chats, activeSessionId, allFolders, onSelectSession, onDeleteChat, onRenameChat, onMoveToFolder, onEditFolder, onDeleteFolder }: {
+function FolderSection({ folder, chats, activeSessionId, runningSessions, allFolders, onSelectSession, onDeleteChat, onRenameChat, onMoveToFolder, onEditFolder, onDeleteFolder }: {
   folder: ChatFolder;
   chats: ChatHistoryEntry[];
   activeSessionId: string;
+  runningSessions: Set<string>;
   allFolders: ChatFolder[];
   onSelectSession: (id: string) => void;
   onDeleteChat: (id: string) => void;
@@ -397,6 +410,7 @@ function FolderSection({ folder, chats, activeSessionId, allFolders, onSelectSes
               key={entry.id}
               entry={entry}
               isActive={entry.id === activeSessionId}
+              isRunning={runningSessions.has(entry.id)}
               folders={allFolders}
               onSelect={() => onSelectSession(entry.id)}
               onDelete={() => onDeleteChat(entry.id)}
@@ -467,6 +481,8 @@ export function Sidebar({
 }: SidebarProps) {
   const navigate = useNavigate();
   const { t } = useI18n();
+  const running = useRunningSessions();
+  const runningSessions = useMemo(() => new Set(running), [running]);
   const uncategorized = chatHistory.filter((e) => !e.folderId);
 
   // Drop target state for the uncategorized zone (remove from folder)
@@ -557,6 +573,7 @@ export function Sidebar({
               folder={folder}
               chats={folderChats}
               activeSessionId={activeSessionId}
+              runningSessions={runningSessions}
               allFolders={folders}
               onSelectSession={onSelectSession}
               onDeleteChat={onDeleteChat}
@@ -606,6 +623,7 @@ export function Sidebar({
                 key={entry.id}
                 entry={entry}
                 isActive={entry.id === activeSessionId}
+                isRunning={runningSessions.has(entry.id)}
                 folders={folders}
                 onSelect={() => onSelectSession(entry.id)}
                 onDelete={() => onDeleteChat(entry.id)}

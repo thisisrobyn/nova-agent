@@ -100,6 +100,15 @@ REASONING: bool | None = (
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
 
+# Cloud endpoints are pinned explicitly. Left unset, the provider SDKs fall back
+# to ANTHROPIC_BASE_URL / OPENAI_BASE_URL from the environment, which lets a
+# local-LLM override (e.g. an Ollama URL exported for another tool) silently
+# hijack the cloud path and send /v1/messages to localhost:11434.
+ANTHROPIC_BASE_URL: str = os.getenv(
+    "NOVA_ANTHROPIC_BASE_URL", "https://api.anthropic.com"
+)
+OPENAI_BASE_URL: str = os.getenv("NOVA_OPENAI_BASE_URL", "https://api.openai.com/v1")
+
 
 def _load_persisted_settings() -> None:
     """Override config globals from ``data/settings.json`` if present."""
@@ -167,6 +176,7 @@ def _build_llm() -> Any | None:
                 model=MODEL_NAME,
                 temperature=TEMPERATURE,
                 api_key=OPENAI_API_KEY,
+                base_url=OPENAI_BASE_URL,
                 timeout=LLM_TIMEOUT,
             )
 
@@ -181,6 +191,7 @@ def _build_llm() -> Any | None:
             return ChatAnthropic(
                 model=MODEL_NAME,
                 api_key=ANTHROPIC_API_KEY,
+                base_url=ANTHROPIC_BASE_URL,
                 timeout=LLM_TIMEOUT,
                 max_tokens=4096,
             )

@@ -13,6 +13,7 @@ import { ToastProvider } from '@/components/ui/Toast';
 import { useChat } from '@/hooks/useChat';
 import { useAuth } from '@/hooks/useAuth';
 import { generateSessionId } from '@/lib/utils';
+import * as chatRuns from '@/lib/chatRuns';
 import { generateTitle, clearHistory, listSessions } from '@/lib/api';
 
 const GUEST_MAX_MESSAGES = 5;
@@ -219,6 +220,10 @@ export function ChatPage() {
   }, []);
 
   const handleDeleteChat = useCallback(async (id: string) => {
+    // Cancel first: a generation left running would persist the session again
+    // right after it was deleted, and the chat would come back on its own.
+    if (chatRuns.getRun(id).isLoading) await chatRuns.stop(id);
+    chatRuns.discard(id);
     await clearHistory(id);
     setChatHistory((prev) => prev.filter((e) => e.id !== id));
     if (id === activeSessionId) {
@@ -275,6 +280,7 @@ export function ChatPage() {
 
   const handleLogout = useCallback(() => {
     logout();
+    chatRuns.discardAll();
     setChatHistory([]);
     setFolders([]);
     setActiveSessionId(generateSessionId());

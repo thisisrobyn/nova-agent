@@ -162,7 +162,9 @@ class ProviderTestRequest(BaseModel):
     """Validate an API key and list available models."""
 
     provider: str = Field(..., description="openai | anthropic")
-    api_key: str = Field(..., min_length=1)
+    api_key: Optional[str] = Field(
+        None, description="If omitted, the already-stored key for this provider is used."
+    )
 
 
 class ProviderModel(BaseModel):
