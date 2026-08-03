@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.0](https://github.com/thisisrober/nova-agent/compare/v0.6.0...v0.7.0) (2026-08-03)
+
+
+### Features
+
+* **mcp-connections:** added connections to Google, Microsoft and GitHub per user, improved provider selector and overall visibility of the application ([#13](https://github.com/thisisrober/nova-agent/issues/13)) ([270c15a](https://github.com/thisisrober/nova-agent/commit/270c15aebf8c352be7abbbc5c805ffe8570f28a4))
+* updated landing page and documentation ([af91df1](https://github.com/thisisrober/nova-agent/commit/af91df19bada82f91824cc35effcaf0b5f2686c5))
+
 ## [0.6.0](https://github.com/thisisrober/nova-agent/compare/v0.5.0...v0.6.0) (2026-08-02)
 
 
