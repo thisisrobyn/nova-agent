@@ -1,4 +1,5 @@
-/* Brand logo marks for LLM providers (monochrome, inherit currentColor). */
+/* Brand logo marks for LLM providers (monochrome, inherit currentColor)
+   and for connectable external services (full brand colors). */
 
 interface IconProps {
   className?: string;
@@ -33,6 +34,51 @@ export function AnthropicIcon({ className }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
       <path d="M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.541Zm-.3712 10.223 2.2914-5.9456 2.2914 5.9456Z"/>
+    </svg>
+  );
+}
+
+/* ── External services ────────────────────────────────────── */
+
+/**
+ * Service marks render in brand colors by default. Pass `mono` to draw them
+ * in `currentColor` instead, which is how connection state is signalled
+ * (grey when disconnected, green when connected).
+ */
+interface ServiceIconProps extends IconProps {
+  mono?: boolean;
+}
+
+export function GoogleIcon({ className, mono }: ServiceIconProps) {
+  const c = (brand: string) => (mono ? 'currentColor' : brand);
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <path fill={c('#4285F4')} d="M23.52 12.273c0-.851-.076-1.67-.218-2.455H12v4.642h6.458a5.52 5.52 0 0 1-2.394 3.622v3.01h3.878c2.269-2.089 3.578-5.165 3.578-8.818z"/>
+      <path fill={c('#34A853')} d="M12 24c3.24 0 5.956-1.075 7.942-2.908l-3.878-3.01c-1.075.72-2.45 1.145-4.064 1.145-3.126 0-5.772-2.11-6.717-4.947H1.276v3.108A11.995 11.995 0 0 0 12 24z"/>
+      <path fill={c('#FBBC05')} d="M5.283 14.28a7.212 7.212 0 0 1 0-4.56V6.612H1.276a11.998 11.998 0 0 0 0 10.776l4.007-3.108z"/>
+      <path fill={c('#EA4335')} d="M12 4.773c1.762 0 3.344.606 4.589 1.795l3.442-3.442C17.951 1.19 15.235 0 12 0 7.31 0 3.255 2.69 1.276 6.612l4.007 3.108C6.228 6.883 8.874 4.773 12 4.773z"/>
+    </svg>
+  );
+}
+
+export function MicrosoftIcon({ className, mono }: ServiceIconProps) {
+  const c = (brand: string) => (mono ? 'currentColor' : brand);
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <path fill={c('#F25022')} d="M0 0h11.377v11.377H0z"/>
+      <path fill={c('#7FBA00')} d="M12.623 0H24v11.377H12.623z"/>
+      <path fill={c('#00A4EF')} d="M0 12.623h11.377V24H0z"/>
+      <path fill={c('#FFB900')} d="M12.623 12.623H24V24H12.623z"/>
+    </svg>
+  );
+}
+
+export function GitHubIcon({ className }: ServiceIconProps) {
+  // Always monochrome — GitHub's mark adapts to the surrounding theme, so the
+  // `mono` prop is accepted for a uniform signature but changes nothing.
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
     </svg>
   );
 }

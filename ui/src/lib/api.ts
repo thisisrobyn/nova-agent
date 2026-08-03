@@ -1,6 +1,24 @@
-import type { ChatResponse, DocumentDeleteResponse, DocumentInfo, DocumentListResponse, EpisodeListResponse, FactListResponse, HistoryResponse, MemoryClearResponse, OllamaCatalogModel, OllamaModel, OllamaStatus, ProviderTestResult, PullProgress, ScheduledTask, ScheduledTaskListResponse, SessionSummary, SettingsData, StreamEvent, TaskExecutionListResponse, ToolInfo } from './types';
+import type { AuthorizeUrlResponse, ChatResponse, ConnectionListResponse, GitHubManifestResponse, DocumentDeleteResponse, DocumentInfo, DocumentListResponse, EpisodeListResponse, FactListResponse, HistoryResponse, MemoryClearResponse, OllamaCatalogModel, OllamaModel, OllamaStatus, ProviderTestResult, PullProgress, ScheduledTask, ScheduledTaskListResponse, SessionSummary, SettingsData, StreamEvent, TaskExecutionListResponse, ToolInfo } from './types';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
+
+/**
+ * Authorization header for endpoints whose data belongs to one user.
+ *
+ * Connections hold live access to somebody's mailbox and files, so the
+ * backend has to know who is asking — without this every user would share a
+ * single set of tokens. Returns an empty object when signed out, which the
+ * backend treats as the local single-user identity.
+ */
+async function authHeaders(): Promise<Record<string, string>> {
+  try {
+    const { getIdToken } = await import('./auth');
+    const token = await getIdToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
 
 export async function sendMessage(
   sessionId: string,
@@ -8,7 +26,7 @@ export async function sendMessage(
 ): Promise<ChatResponse> {
   const res = await fetch(`${API_BASE}/api/v1/chat`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
     body: JSON.stringify({ message, session_id: sessionId }),
   });
   if (!res.ok) {
@@ -33,6 +51,23 @@ export async function getHistory(
   return res.json() as Promise<HistoryResponse>;
 }
 
+/**
+ * Cancel the in-flight generation for a session.
+ *
+ * Aborting the fetch only closes our end of the stream — the backend task is
+ * detached on purpose, so it has to be cancelled explicitly.
+ */
+export async function stopGeneration(sessionId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/chat/stop/${sessionId}`, {
+      method: 'POST',
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function clearHistory(sessionId: string): Promise<void> {
   await fetch(`${API_BASE}/api/v1/chat/history/${sessionId}`, {
     method: 'DELETE',
@@ -55,15 +90,18 @@ export async function sendMessageStream(
       total_tokens: number;
       iteration_count: number;
       elapsed_seconds: number;
+      cancelled?: boolean;
     }) => void;
     onError: (message: string) => void;
     onStatus?: (message: string) => void;
+    onCancelled?: () => void;
   },
   signal?: AbortSignal,
 ): Promise<void> {
   const res = await fetch(`${API_BASE}/api/v1/chat/stream`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    // The JWT tells the backend whose connected accounts the agent acts on.
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
     body: JSON.stringify({ message, session_id: sessionId }),
     signal,
   });
@@ -108,6 +146,9 @@ export async function sendMessageStream(
             break;
           case 'status':
             callbacks.onStatus?.(event.message);
+            break;
+          case 'cancelled':
+            callbacks.onCancelled?.();
             break;
         }
       } catch {
@@ -192,7 +233,7 @@ export async function getOllamaCatalog(): Promise<OllamaCatalogModel[]> {
   return data.models;
 }
 
-export async function testProvider(provider: string, apiKey: string): Promise<ProviderTestResult> {
+export async function testProvider(provider: string, apiKey?: string): Promise<ProviderTestResult> {
   const res = await fetch(`${API_BASE}/api/v1/providers/test`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -363,4 +404,86 @@ export async function getTaskExecutionLogs(
   );
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json() as Promise<TaskExecutionListResponse>;
+}
+
+/* ── External service connections ─────────────────────────── */
+
+export async function getConnections(): Promise<ConnectionListResponse> {
+  const res = await fetch(`${API_BASE}/api/v1/connections`, {
+    headers: await authHeaders(),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json() as Promise<ConnectionListResponse>;
+}
+
+/**
+ * Ask the backend for a provider's authorization URL.
+ *
+ * `lang` travels with the OAuth state so the callback page the popup lands on
+ * is rendered in the same language as the UI.
+ */
+export async function getAuthorizeUrl(
+  provider: string,
+  lang = 'en',
+): Promise<AuthorizeUrlResponse> {
+  const res = await fetch(
+    `${API_BASE}/api/v1/connections/${provider}/authorize?lang=${lang}`,
+    { method: 'POST', headers: await authHeaders() },
+  );
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || `API error ${res.status}`);
+  }
+  return res.json() as Promise<AuthorizeUrlResponse>;
+}
+
+export async function disconnectProvider(provider: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/v1/connections/${provider}`, {
+    method: 'DELETE',
+    headers: await authHeaders(),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+}
+
+/** Register the OAuth application credentials for a provider. */
+export async function saveProviderCredentials(
+  provider: string,
+  data: { client_id: string; client_secret: string; tenant_id?: string },
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/v1/connections/${provider}/credentials`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || `API error ${res.status}`);
+  }
+}
+
+export async function clearProviderCredentials(provider: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/v1/connections/${provider}/credentials`, {
+    method: 'DELETE',
+    headers: await authHeaders(),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+}
+
+/** Fetch the GitHub App manifest the setup popup has to submit. */
+export async function getGitHubManifest(
+  name: string,
+  org?: string,
+  lang = 'en',
+): Promise<GitHubManifestResponse> {
+  const params = new URLSearchParams({ name, lang });
+  if (org) params.set('org', org);
+  const res = await fetch(
+    `${API_BASE}/api/v1/connections/github/setup/manifest?${params}`,
+    { method: 'POST', headers: await authHeaders() },
+  );
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || `API error ${res.status}`);
+  }
+  return res.json() as Promise<GitHubManifestResponse>;
 }

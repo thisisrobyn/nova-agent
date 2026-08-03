@@ -156,10 +156,10 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
   };
 
   const handleTestKey = async () => {
-    if (!apiKey.trim()) return;
+    if (!apiKey.trim() && !keyIsStored) return;
     setTesting(true); setTestError(''); setProviderModels([]);
     try {
-      const res = await testProvider(provider, apiKey.trim());
+      const res = await testProvider(provider, apiKey.trim() || undefined);
       if (res.valid) {
         setProviderModels(res.models);
         if (res.models.length === 0) setTestError(t('set.noModels'));
@@ -175,8 +175,9 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
     setSaving(true); setMsg('');
     try {
       const payload: Parameters<typeof updateSettings>[0] = { provider, model_name: modelId };
-      if (provider === 'openai') payload.openai_api_key = apiKey.trim();
-      if (provider === 'anthropic') payload.anthropic_api_key = apiKey.trim();
+      // Only send a new key if the user typed one; otherwise keep the stored key intact.
+      if (apiKey.trim() && provider === 'openai') payload.openai_api_key = apiKey.trim();
+      if (apiKey.trim() && provider === 'anthropic') payload.anthropic_api_key = apiKey.trim();
       const s = await updateSettings(payload);
       setSettings(s);
       setMsg(t('set.activeModel', { model: modelId }));
@@ -430,7 +431,7 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                     className="w-full rounded-lg border border-surface-700/50 bg-surface-800 py-2 pl-9 pr-3 text-xs text-surface-100 placeholder:text-surface-600 focus:border-primary-700/50 focus:outline-none"
                   />
                 </div>
-                <Button variant="primary" size="sm" className="gap-1.5" onClick={handleTestKey} disabled={testing || !apiKey.trim()}>
+                <Button variant="primary" size="sm" className="gap-1.5" onClick={handleTestKey} disabled={testing || (!apiKey.trim() && !keyIsStored)}>
                   {testing ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
                   {t('set.connect')}
                 </Button>

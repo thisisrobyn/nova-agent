@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   MessageSquare,
@@ -17,10 +17,15 @@ import {
   FolderInput,
   Brain,
   Clock,
+  Plug,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { GoogleIcon, MicrosoftIcon, GitHubIcon } from '@/components/ui/BrandIcons';
 import { getFolderIcon } from '@/components/layout/FolderModal';
 import { useI18n } from '@/lib/i18n';
+import { useConnections } from '@/hooks/useConnections';
+import { useRunningSessions } from '@/hooks/useRunningSessions';
+import type { ConnectionProvider } from '@/lib/types';
 
 /* ── Data model ────────────────────────────────────────────── */
 
@@ -80,6 +85,7 @@ interface SidebarProps {
   onOpenSettings?: () => void;
   onOpenIntelligence?: () => void;
   onOpenScheduler?: () => void;
+  onOpenConnections?: () => void;
   onOpenAppSettings?: () => void;
 }
 
@@ -236,15 +242,17 @@ function InlineRename({ value, onConfirm, onCancel }: {
 
 /* ── Chat card (draggable) ─────────────────────────────────── */
 
-function ChatCard({ entry, isActive, folders, onSelect, onDelete, onRename, onMoveToFolder }: {
+function ChatCard({ entry, isActive, isRunning, folders, onSelect, onDelete, onRename, onMoveToFolder }: {
   entry: ChatHistoryEntry;
   isActive: boolean;
+  isRunning?: boolean;
   folders: ChatFolder[];
   onSelect: () => void;
   onDelete: () => void;
   onRename: (newTitle: string) => void;
   onMoveToFolder: (folderId: string | null) => void;
 }) {
+  const { t } = useI18n();
   const [renaming, setRenaming] = useState(false);
 
   return (
@@ -268,6 +276,15 @@ function ChatCard({ entry, isActive, folders, onSelect, onDelete, onRename, onMo
       ) : (
         <span className="line-clamp-2 flex-1">{entry.title}</span>
       )}
+      {isRunning && (
+        <span
+          className="flex shrink-0 items-center"
+          title={t('sidebar.generating')}
+          aria-label={t('sidebar.generating')}
+        >
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary-500 shadow-[0_0_6px_var(--color-primary-500)]" />
+        </span>
+      )}
       {!renaming && (
         <ChatMenu
           folders={folders}
@@ -283,10 +300,11 @@ function ChatCard({ entry, isActive, folders, onSelect, onDelete, onRename, onMo
 
 /* ── Folder section (drop target) ──────────────────────────── */
 
-function FolderSection({ folder, chats, activeSessionId, allFolders, onSelectSession, onDeleteChat, onRenameChat, onMoveToFolder, onEditFolder, onDeleteFolder }: {
+function FolderSection({ folder, chats, activeSessionId, runningSessions, allFolders, onSelectSession, onDeleteChat, onRenameChat, onMoveToFolder, onEditFolder, onDeleteFolder }: {
   folder: ChatFolder;
   chats: ChatHistoryEntry[];
   activeSessionId: string;
+  runningSessions: Set<string>;
   allFolders: ChatFolder[];
   onSelectSession: (id: string) => void;
   onDeleteChat: (id: string) => void;
@@ -392,6 +410,7 @@ function FolderSection({ folder, chats, activeSessionId, allFolders, onSelectSes
               key={entry.id}
               entry={entry}
               isActive={entry.id === activeSessionId}
+              isRunning={runningSessions.has(entry.id)}
               folders={allFolders}
               onSelect={() => onSelectSession(entry.id)}
               onDelete={() => onDeleteChat(entry.id)}
@@ -405,6 +424,36 @@ function FolderSection({ folder, chats, activeSessionId, allFolders, onSelectSes
         </div>
       )}
     </div>
+  );
+}
+
+/* ── Connection state marks ────────────────────────────────── */
+
+const SERVICE_MARKS: [ConnectionProvider, (p: { className?: string; mono?: boolean }) => React.ReactElement][] = [
+  ['google', GoogleIcon],
+  ['microsoft', MicrosoftIcon],
+  ['github', GitHubIcon],
+];
+
+/** Green when the service is connected, grey when it is not. */
+function ConnectionMarks() {
+  const { connections } = useConnections();
+
+  return (
+    <span className="ml-auto flex items-center gap-1">
+      {SERVICE_MARKS.map(([provider, Icon]) => {
+        const connected = connections.some((c) => c.provider === provider && c.connected);
+        return (
+          <Icon
+            key={provider}
+            mono
+            className={`h-3 w-3 transition-colors ${
+              connected ? 'text-green-500' : 'text-surface-600'
+            }`}
+          />
+        );
+      })}
+    </span>
   );
 }
 
@@ -427,10 +476,13 @@ export function Sidebar({
   onOpenSettings,
   onOpenIntelligence,
   onOpenScheduler,
+  onOpenConnections,
   onOpenAppSettings,
 }: SidebarProps) {
   const navigate = useNavigate();
   const { t } = useI18n();
+  const running = useRunningSessions();
+  const runningSessions = useMemo(() => new Set(running), [running]);
   const uncategorized = chatHistory.filter((e) => !e.folderId);
 
   // Drop target state for the uncategorized zone (remove from folder)
@@ -495,6 +547,19 @@ export function Sidebar({
             <Clock className="h-3.5 w-3.5 text-primary-500" /> {t('sidebar.scheduler')}
           </Button>
         )}
+        {!import.meta.env.PROD && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start gap-1.5 text-surface-400"
+            onClick={onOpenConnections}
+            title={t('conn.title')}
+          >
+            <Plug className="h-3.5 w-3.5 text-primary-500" />
+            {t('sidebar.connections')}
+            <ConnectionMarks />
+          </Button>
+        )}
       </div>
 
       {/* Chat history with folders */}
@@ -508,6 +573,7 @@ export function Sidebar({
               folder={folder}
               chats={folderChats}
               activeSessionId={activeSessionId}
+              runningSessions={runningSessions}
               allFolders={folders}
               onSelectSession={onSelectSession}
               onDeleteChat={onDeleteChat}
@@ -557,6 +623,7 @@ export function Sidebar({
                 key={entry.id}
                 entry={entry}
                 isActive={entry.id === activeSessionId}
+                isRunning={runningSessions.has(entry.id)}
                 folders={folders}
                 onSelect={() => onSelectSession(entry.id)}
                 onDelete={() => onDeleteChat(entry.id)}

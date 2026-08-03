@@ -1,6 +1,8 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { sendMessageStream, getHistory, clearHistory } from '@/lib/api';
-import type { ChatMessage, TokenUsage, ToolInfo } from '@/lib/types';
+import { useState, useCallback, useRef, useEffect, useMemo, useSyncExternalStore } from 'react';
+import { getHistory, clearHistory } from '@/lib/api';
+import * as chatRuns from '@/lib/chatRuns';
+import type { DisplayMessage } from '@/lib/chatRuns';
+import type { ChatMessage } from '@/lib/types';
 
 interface AttachedFile {
   name: string;
@@ -8,15 +10,7 @@ interface AttachedFile {
   size: number;
 }
 
-export interface DisplayMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  tools_used: { name: string; result: string }[];
-  token_usage: TokenUsage | null;
-  timestamp: number;
-  elapsed_seconds?: number;
-}
+export type { DisplayMessage };
 
 function buildMessageWithFiles(text: string, files?: AttachedFile[]): string {
   if (!files || files.length === 0) return text;
@@ -29,156 +23,43 @@ function buildMessageWithFiles(text: string, files?: AttachedFile[]): string {
   return text ? `${prefix}[Message]\n${text}` : prefix;
 }
 
+/**
+ * Chat state for one session.
+ *
+ * The visible conversation is the persisted history plus whatever the live
+ * run has produced since (see `lib/chatRuns`). Generations outlive this hook,
+ * so switching chats and coming back shows the question still standing and
+ * the answer still streaming instead of an empty screen.
+ */
 export function useChat(sessionId: string) {
-  const [messages, setMessages] = useState<DisplayMessage[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [historyMessages, setHistoryMessages] = useState<DisplayMessage[]>([]);
   const [totalTokens, setTotalTokens] = useState(0);
   const [iterationCount, setIterationCount] = useState(0);
-  const [streamingContent, setStreamingContent] = useState('');
-  const [streamingTools, setStreamingTools] = useState<ToolInfo[]>([]);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [historyUnavailable, setHistoryUnavailable] = useState(false);
   const idCounter = useRef(0);
-  const streamRef = useRef('');
-  const lastUserContentRef = useRef('');
-  const modelLoadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hasReceivedTokenRef = useRef(false);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const pendingQueueRef = useRef<string[]>([]);
   const loadHistoryVersionRef = useRef(0);
 
-  // Abort in-flight stream when session changes or on unmount
-  useEffect(() => {
-    return () => {
-      abortControllerRef.current?.abort();
-      abortControllerRef.current = null;
-      if (modelLoadingTimerRef.current) {
-        clearTimeout(modelLoadingTimerRef.current);
-        modelLoadingTimerRef.current = null;
-      }
-    };
-  }, [sessionId]);
+  const run = useSyncExternalStore(
+    useCallback((cb) => chatRuns.subscribe(sessionId, cb), [sessionId]),
+    useCallback(() => chatRuns.getRun(sessionId), [sessionId]),
+  );
 
-  // Reset state when session changes
+  // Reset the persisted half when the session changes. The run half is keyed
+  // by session in the store, so it needs no resetting — that is the point.
   useEffect(() => {
-    setMessages([]);
-    setIsLoading(false);
+    setHistoryMessages([]);
     setTotalTokens(0);
     setIterationCount(0);
-    setError(null);
-    setStreamingContent('');
-    setStreamingTools([]);
-    setStatusMessage(null);
     setHistoryUnavailable(false);
-    pendingQueueRef.current = [];
     loadHistoryVersionRef.current++;
-    if (modelLoadingTimerRef.current) {
-      clearTimeout(modelLoadingTimerRef.current);
-      modelLoadingTimerRef.current = null;
-    }
   }, [sessionId]);
 
-  const nextId = () => `msg-${++idCounter.current}-${Date.now()}`;
+  const nextId = () => `hist-${++idCounter.current}-${Date.now()}`;
 
-  const sendRaw = useCallback(
-    async (content: string) => {
-      // Abort any in-flight stream before starting a new one
-      abortControllerRef.current?.abort();
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
-
-      setIsLoading(true);
-      setError(null);
-      setStreamingContent('');
-      setStreamingTools([]);
-      setStatusMessage(null);
-      streamRef.current = '';
-      lastUserContentRef.current = content;
-      hasReceivedTokenRef.current = false;
-
-      // 5-second timer: if no tokens arrive, show model-loading hint
-      modelLoadingTimerRef.current = setTimeout(() => {
-        if (!hasReceivedTokenRef.current) {
-          setStatusMessage('Loading model...');
-        }
-      }, 5000);
-
-      try {
-        await sendMessageStream(sessionId, content, {
-          onToken: (token) => {
-            hasReceivedTokenRef.current = true;
-            if (modelLoadingTimerRef.current) {
-              clearTimeout(modelLoadingTimerRef.current);
-              modelLoadingTimerRef.current = null;
-            }
-            setStatusMessage(null);
-            streamRef.current += token;
-            setStreamingContent(streamRef.current);
-          },
-          onToolStart: (name) => {
-            setStreamingTools((prev) => [...prev, { name, result: '' }]);
-            streamRef.current = '';
-            setStreamingContent('');
-          },
-          onToolEnd: (tool) => {
-            setStreamingTools((prev) =>
-              prev.map((t) =>
-                t.name === tool.name && t.result === '' ? tool : t,
-              ),
-            );
-          },
-          onDone: (data) => {
-            const content = streamRef.current || data.response || '';
-
-            const assistantMsg: DisplayMessage = {
-              id: nextId(),
-              role: 'assistant',
-              content,
-              tools_used: data.tools_used ?? [],
-              token_usage: data.token_usage as TokenUsage | null,
-              timestamp: Date.now(),
-              elapsed_seconds: data.elapsed_seconds,
-            };
-
-            setMessages((prev) => [...prev, assistantMsg]);
-            setTotalTokens(data.total_tokens);
-            setIterationCount(data.iteration_count);
-            setStreamingContent('');
-            setStreamingTools([]);
-            setStatusMessage(null);
-          },
-          onError: (msg) => {
-            setError(msg);
-            setStatusMessage(null);
-          },
-          onStatus: (msg) => {
-            setStatusMessage(msg);
-          },
-        }, controller.signal);
-      } catch (e) {
-        if (e instanceof DOMException && e.name === 'AbortError') return;
-        setError(e instanceof Error ? e.message : 'Unknown error');
-      } finally {
-        if (modelLoadingTimerRef.current) {
-          clearTimeout(modelLoadingTimerRef.current);
-          modelLoadingTimerRef.current = null;
-        }
-        setStatusMessage(null);
-
-        // Process next queued message if any
-        const nextMessage = pendingQueueRef.current.shift();
-        if (nextMessage) {
-          // Keep isLoading true — immediately process next in queue
-          streamRef.current = '';
-          sendRaw(nextMessage);
-        } else {
-          setIsLoading(false);
-        }
-      }
-    },
-    [sessionId],
+  const messages = useMemo(
+    () => (run.pending.length > 0 ? [...historyMessages, ...run.pending] : historyMessages),
+    [historyMessages, run.pending],
   );
 
   const send = useCallback(
@@ -190,55 +71,41 @@ export function useChat(sessionId: string) {
           ? `${content}${content ? '\n' : ''}📎 ${files.map((f) => f.name).join(', ')}`
           : content;
 
-      const userMsg: DisplayMessage = {
-        id: nextId(),
-        role: 'user',
-        content: displayContent,
-        tools_used: [],
-        token_usage: null,
-        timestamp: Date.now(),
-      };
-
-      setMessages((prev) => [...prev, userMsg]);
-      const fullMessage = buildMessageWithFiles(content, files);
-
-      if (isLoading) {
-        // Queue the message — it will be sent when the current stream finishes
-        pendingQueueRef.current.push(fullMessage);
-        return;
-      }
-
-      await sendRaw(fullMessage);
+      chatRuns.send(sessionId, buildMessageWithFiles(content, files), displayContent);
     },
-    [sendRaw, isLoading],
+    [sessionId],
   );
 
-  const retry = useCallback(async () => {
-    if (isLoading || !lastUserContentRef.current) return;
-    setError(null);
-    await sendRaw(lastUserContentRef.current);
-  }, [sendRaw, isLoading]);
+  const stop = useCallback(() => chatRuns.stop(sessionId), [sessionId]);
+
+  const retry = useCallback(() => chatRuns.retry(sessionId), [sessionId]);
 
   const editMessage = useCallback(
     async (messageId: string, newContent: string) => {
-      if (isLoading || !newContent.trim()) return;
+      if (run.isLoading || !newContent.trim()) return;
 
-      setMessages((prev) => {
-        const idx = prev.findIndex((m) => m.id === messageId);
-        if (idx === -1) return prev;
-        const updated = prev.slice(0, idx);
-        updated.push({ ...prev[idx], content: newContent });
-        return updated;
-      });
+      const pendingIdx = run.pending.findIndex((m) => m.id === messageId);
+      if (pendingIdx >= 0) {
+        chatRuns.truncatePending(sessionId, pendingIdx + 1, newContent);
+      } else {
+        const historyIdx = historyMessages.findIndex((m) => m.id === messageId);
+        if (historyIdx === -1) return;
+        setHistoryMessages((prev) => [
+          ...prev.slice(0, historyIdx),
+          { ...prev[historyIdx], content: newContent },
+        ]);
+        chatRuns.resetPending(sessionId);
+      }
 
       await new Promise((r) => setTimeout(r, 50));
-      await sendRaw(newContent);
+      chatRuns.send(sessionId, newContent);
     },
-    [sendRaw, isLoading],
+    [sessionId, run.isLoading, run.pending, historyMessages],
   );
 
   const loadHistory = useCallback(async (): Promise<'loaded' | 'empty' | 'error'> => {
     const version = ++loadHistoryVersionRef.current;
+    const requestedAt = Date.now();
     setIsLoadingHistory(true);
     setHistoryUnavailable(false);
     try {
@@ -254,12 +121,20 @@ export function useChat(sessionId: string) {
           tools_used: m.tools_used,
           token_usage: m.token_usage,
           timestamp: Date.now(),
+          elapsed_seconds: m.elapsed_seconds ?? undefined,
         }));
-      setMessages(mapped);
+      setHistoryMessages(mapped);
       setTotalTokens(data.total_tokens);
       setIterationCount(data.iteration_count);
-      if (mapped.length === 0) setHistoryUnavailable(true);
-      return mapped.length > 0 ? 'loaded' : 'empty';
+
+      // Turns that finished before this request are now part of the history —
+      // keeping them locally too would show every one of them twice.
+      chatRuns.releaseIfSettledBefore(sessionId, requestedAt);
+
+      const live = chatRuns.getRun(sessionId);
+      const visible = mapped.length + live.pending.length;
+      if (visible === 0 && !live.isLoading) setHistoryUnavailable(true);
+      return visible > 0 || live.isLoading ? 'loaded' : 'empty';
     } catch {
       if (loadHistoryVersionRef.current !== version) return 'error';
       setHistoryUnavailable(true);
@@ -274,24 +149,25 @@ export function useChat(sessionId: string) {
 
   const clear = useCallback(async () => {
     await clearHistory(sessionId);
-    setMessages([]);
+    chatRuns.discard(sessionId);
+    setHistoryMessages([]);
     setTotalTokens(0);
     setIterationCount(0);
-    setError(null);
   }, [sessionId]);
 
   return {
     messages,
-    isLoading,
+    isLoading: run.isLoading,
     isLoadingHistory,
     historyUnavailable,
-    error,
-    totalTokens,
-    iterationCount,
-    streamingContent,
-    streamingTools,
-    statusMessage,
+    error: run.error,
+    totalTokens: run.totalTokens || totalTokens,
+    iterationCount: run.iterationCount || iterationCount,
+    streamingContent: run.streamingContent,
+    streamingTools: run.streamingTools,
+    statusMessage: run.statusMessage,
     send,
+    stop,
     retry,
     editMessage,
     loadHistory,

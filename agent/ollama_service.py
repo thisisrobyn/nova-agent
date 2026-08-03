@@ -138,12 +138,23 @@ async def build_catalog() -> list[dict[str, Any]]:
 
 # ── Cloud provider validation + model listing ────────────────────────
 
-async def list_provider_models(provider: str, api_key: str) -> dict[str, Any]:
+async def list_provider_models(provider: str, api_key: str | None) -> dict[str, Any]:
     """Validate an API key and list available chat models for the provider.
+
+    If ``api_key`` is not provided, falls back to the key already stored
+    for this provider (so a saved key can be re-tested without retyping it).
 
     Returns ``{"valid": bool, "models": [...], "error": str | None}``.
     """
+    from agent import llm as llm_config
+
     provider = provider.lower()
+    if not api_key:
+        api_key = (
+            llm_config.ANTHROPIC_API_KEY if provider == "anthropic"
+            else llm_config.OPENAI_API_KEY if provider == "openai"
+            else ""
+        )
     if not api_key:
         return {"valid": False, "models": [], "error": "API key is required."}
 

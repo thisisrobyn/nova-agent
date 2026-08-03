@@ -32,6 +32,7 @@ interface ChatAreaProps {
   streamingTools: ToolInfo[];
   statusMessage: string | null;
   onSend: (message: string, files?: FileReadResult[]) => void;
+  onStop?: () => void;
   onRetry: () => void;
   onEditMessage: (id: string, newContent: string) => void;
   isGuest?: boolean;
@@ -51,6 +52,7 @@ export function ChatArea({
   streamingTools,
   statusMessage,
   onSend,
+  onStop,
   onRetry,
   onEditMessage,
   isGuest = false,
@@ -179,8 +181,9 @@ export function ChatArea({
         )}
       </AnimatePresence>
 
-      {isLoadingHistory ? (
-        /* Loading history animation */
+      {isLoadingHistory && !isLoading ? (
+        /* Loading history animation — skipped while an answer is streaming,
+           so returning to a working chat shows the answer, not a spinner. */
         <div className="flex h-full flex-col items-center justify-center">
           <motion.div
             className="flex flex-col items-center gap-4"
@@ -228,6 +231,7 @@ export function ChatArea({
             <ChatInput
               onSend={onSend}
               isLoading={isLoading}
+              onStop={onStop}
               externalFiles={droppedFiles}
               onExternalFilesConsumed={handleDroppedFilesConsumed}
               disabled={guestLimitReached}
@@ -259,6 +263,7 @@ export function ChatArea({
             <ChatInput
               onSend={onSend}
               isLoading={isLoading}
+              onStop={onStop}
               externalFiles={droppedFiles}
               onExternalFilesConsumed={handleDroppedFilesConsumed}
               disabled={guestLimitReached}
@@ -393,6 +398,7 @@ export function ChatArea({
               <ChatInput
                 onSend={onSend}
                 isLoading={isLoading}
+                onStop={onStop}
                 externalFiles={droppedFiles}
                 onExternalFilesConsumed={handleDroppedFilesConsumed}
                 disabled={guestLimitReached}

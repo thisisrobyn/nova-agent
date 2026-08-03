@@ -15,6 +15,8 @@ export interface ChatMessage {
   content: string;
   tools_used: ToolInfo[];
   token_usage: TokenUsage | null;
+  /** Wall-clock seconds the assistant took to produce this message. */
+  elapsed_seconds?: number | null;
 }
 
 export interface ChatResponse {
@@ -129,6 +131,13 @@ export interface StreamDoneEvent {
   total_tokens: number;
   iteration_count: number;
   elapsed_seconds: number;
+  /** True when the user stopped the generation before it finished. */
+  cancelled?: boolean;
+}
+
+/** Emitted just before `done` when the user pressed stop. */
+export interface StreamCancelledEvent {
+  type: 'cancelled';
 }
 
 export interface StreamErrorEvent {
@@ -146,6 +155,7 @@ export type StreamEvent =
   | StreamToolStartEvent
   | StreamToolEndEvent
   | StreamDoneEvent
+  | StreamCancelledEvent
   | StreamErrorEvent
   | StreamStatusEvent;
 
@@ -243,4 +253,53 @@ export interface TaskExecution {
 export interface TaskExecutionListResponse {
   executions: TaskExecution[];
   count: number;
+}
+
+/* ── External service connections ────────────────────────── */
+
+export type ConnectionProvider = 'google' | 'microsoft' | 'github';
+
+export interface ConnectionStatus {
+  provider: ConnectionProvider;
+  label: string;
+  description: string;
+  /** The server has OAuth app credentials for this provider. */
+  configured: boolean;
+  /** Where those credentials came from. */
+  credentials_source: 'database' | 'environment' | null;
+  /** The user has an active connection. */
+  connected: boolean;
+  account_email: string | null;
+  account_name: string | null;
+  /** Scopes granted by the connected account. */
+  scopes: string[];
+  /** Scopes NOVA asks for when connecting. */
+  required_scopes: string[];
+  expires_at: number | null;
+  /** Redirect URI to register in the provider's developer console. */
+  redirect_uri: string;
+  /** Developer console where the app is registered. */
+  console_url: string;
+  /** NOVA can register the app automatically (GitHub only). */
+  supports_auto_setup: boolean;
+}
+
+export interface ConnectionListResponse {
+  connections: ConnectionStatus[];
+  /** Whether the caller may register OAuth applications (operator action). */
+  is_admin: boolean;
+}
+
+export interface AuthorizeUrlResponse {
+  provider: string;
+  authorize_url: string;
+  state: string;
+}
+
+export interface GitHubManifestResponse {
+  /** GitHub page the manifest form must POST to. */
+  registration_url: string;
+  /** JSON-encoded manifest, submitted as the `manifest` form field. */
+  manifest: string;
+  state: string;
 }

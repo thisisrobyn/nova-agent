@@ -28,6 +28,8 @@ class ChatMessage(BaseModel):
     content: str
     tools_used: List[ToolInfo] = Field(default_factory=list)
     token_usage: Optional[Dict[str, Any]] = None
+    #: Wall-clock seconds the assistant took to produce this message.
+    elapsed_seconds: Optional[float] = None
 
 
 class ChatResponse(BaseModel):
@@ -160,7 +162,9 @@ class ProviderTestRequest(BaseModel):
     """Validate an API key and list available models."""
 
     provider: str = Field(..., description="openai | anthropic")
-    api_key: str = Field(..., min_length=1)
+    api_key: Optional[str] = Field(
+        None, description="If omitted, the already-stored key for this provider is used."
+    )
 
 
 class ProviderModel(BaseModel):
@@ -359,3 +363,67 @@ class RoadmapResponse(BaseModel):
     project_url: str
     iterations: List[RoadmapIteration] = Field(default_factory=list)
     backlog: List[RoadmapIssue] = Field(default_factory=list)
+
+
+# ── External service connections (OAuth) ────────────────
+
+class ConnectionStatus(BaseModel):
+    """Connection state for a single external service provider."""
+
+    provider: str
+    label: str
+    description: str = ""
+    #: True when the server has OAuth app credentials for this provider.
+    configured: bool = False
+    #: Where those credentials came from: "database", "environment" or None.
+    credentials_source: Optional[str] = None
+    #: True when the current user has an active connection.
+    connected: bool = False
+    account_email: Optional[str] = None
+    account_name: Optional[str] = None
+    #: Scopes actually granted by the connected account.
+    scopes: List[str] = Field(default_factory=list)
+    #: Scopes NOVA asks for when connecting.
+    required_scopes: List[str] = Field(default_factory=list)
+    expires_at: Optional[float] = None
+    #: Redirect URI to register in the provider's developer console.
+    redirect_uri: str
+    #: Developer console where the app is registered.
+    console_url: str = ""
+    #: True when NOVA can register the app automatically (GitHub only).
+    supports_auto_setup: bool = False
+
+
+class ConnectionListResponse(BaseModel):
+    """Connection state for every supported provider."""
+
+    connections: List[ConnectionStatus] = Field(default_factory=list)
+    #: Whether the caller may register OAuth applications (operator action).
+    is_admin: bool = False
+
+
+class AuthorizeUrlResponse(BaseModel):
+    """Authorization URL the UI should open in a popup."""
+
+    provider: str
+    authorize_url: str
+    state: str
+
+
+class ProviderCredentialsUpdate(BaseModel):
+    """OAuth application credentials entered from the setup wizard."""
+
+    client_id: str = Field(min_length=1)
+    client_secret: str = Field(min_length=1)
+    #: Microsoft only — Azure tenant to authenticate against.
+    tenant_id: Optional[str] = None
+
+
+class GitHubManifestResponse(BaseModel):
+    """Everything the UI needs to submit a GitHub App manifest form."""
+
+    #: GitHub page the form must POST to.
+    registration_url: str
+    #: JSON-encoded manifest, submitted as the ``manifest`` form field.
+    manifest: str
+    state: str

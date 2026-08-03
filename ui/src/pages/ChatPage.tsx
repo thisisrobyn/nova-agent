@@ -8,10 +8,12 @@ import { ProfileSettings } from '@/components/auth/ProfileSettings';
 import { IntelligencePanel } from '@/components/intelligence/IntelligencePanel';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { SchedulerPanel } from '@/components/scheduler/SchedulerPanel';
+import { ConnectionsPanel } from '@/components/connections/ConnectionsPanel';
 import { ToastProvider } from '@/components/ui/Toast';
 import { useChat } from '@/hooks/useChat';
 import { useAuth } from '@/hooks/useAuth';
 import { generateSessionId } from '@/lib/utils';
+import * as chatRuns from '@/lib/chatRuns';
 import { generateTitle, clearHistory, listSessions } from '@/lib/api';
 
 const GUEST_MAX_MESSAGES = 5;
@@ -61,6 +63,7 @@ export function ChatPage() {
   const [showIntelligence, setShowIntelligence] = useState(false);
   const [showAppSettings, setShowAppSettings] = useState(false);
   const [showScheduler, setShowScheduler] = useState(false);
+  const [showConnections, setShowConnections] = useState(false);
   const [folderModal, setFolderModal] = useState<{ open: boolean; editing: ChatFolder | null }>({
     open: false,
     editing: null,
@@ -90,6 +93,7 @@ export function ChatPage() {
     streamingTools,
     statusMessage,
     send,
+    stop,
     retry,
     editMessage,
     loadHistory,
@@ -216,6 +220,10 @@ export function ChatPage() {
   }, []);
 
   const handleDeleteChat = useCallback(async (id: string) => {
+    // Cancel first: a generation left running would persist the session again
+    // right after it was deleted, and the chat would come back on its own.
+    if (chatRuns.getRun(id).isLoading) await chatRuns.stop(id);
+    chatRuns.discard(id);
     await clearHistory(id);
     setChatHistory((prev) => prev.filter((e) => e.id !== id));
     if (id === activeSessionId) {
@@ -272,6 +280,7 @@ export function ChatPage() {
 
   const handleLogout = useCallback(() => {
     logout();
+    chatRuns.discardAll();
     setChatHistory([]);
     setFolders([]);
     setActiveSessionId(generateSessionId());
@@ -283,6 +292,7 @@ export function ChatPage() {
   const openIntelligence = useCallback(() => setShowIntelligence(true), []);
   const openAppSettings = useCallback(() => setShowAppSettings(true), []);
   const openScheduler = useCallback(() => setShowScheduler(true), []);
+  const openConnections = useCallback(() => setShowConnections(true), []);
 
   const userMessageCount = messages.filter((m) => m.role === 'user').length;
   const guestLimitReached = effectiveIsGuest && userMessageCount >= GUEST_MAX_MESSAGES;
@@ -332,6 +342,7 @@ export function ChatPage() {
             streamingTools={streamingTools}
             statusMessage={statusMessage}
             onSend={send}
+            onStop={stop}
             onRetry={retry}
             onEditMessage={editMessage}
             isGuest={effectiveIsGuest}
@@ -359,6 +370,7 @@ export function ChatPage() {
             onOpenSettings={openSettings}
             onOpenIntelligence={openIntelligence}
             onOpenScheduler={openScheduler}
+            onOpenConnections={openConnections}
             onOpenAppSettings={openAppSettings}
           />
         )}
@@ -383,6 +395,11 @@ export function ChatPage() {
         <SchedulerPanel
           open={showScheduler}
           onClose={() => setShowScheduler(false)}
+        />
+
+        <ConnectionsPanel
+          open={showConnections}
+          onClose={() => setShowConnections(false)}
         />
 
         <AnimatePresence>

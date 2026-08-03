@@ -152,8 +152,10 @@ export function ChatMessage({
           <div className="flex items-center gap-3">
             {token_usage && (
               <TokenCounter
-                inputTokens={token_usage.input_tokens}
-                outputTokens={token_usage.output_tokens}
+                /* The backend reports prompt_/completion_tokens (OpenAI
+                   naming); older payloads used input_/output_tokens. */
+                inputTokens={token_usage.input_tokens ?? (token_usage.prompt_tokens as number | undefined)}
+                outputTokens={token_usage.output_tokens ?? (token_usage.completion_tokens as number | undefined)}
                 totalTokens={token_usage.total_tokens}
               />
             )}

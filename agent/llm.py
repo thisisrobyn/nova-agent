@@ -80,10 +80,34 @@ OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 MODEL_NAME: str = os.getenv("NOVA_MODEL_NAME", "gemma3:4b")
 TEMPERATURE: float = float(os.getenv("NOVA_TEMPERATURE", "0.7"))
 KEEP_ALIVE: int = int(os.getenv("NOVA_KEEP_ALIVE", "-1"))
-NUM_CTX: int | None = int(os.getenv("NOVA_NUM_CTX")) if os.getenv("NOVA_NUM_CTX") else None
+# Ollama defaults to a very small context window (2048 tokens on most models),
+# and NOVA's system prompt plus ~40 tool schemas exceed even 8192: Ollama then
+# truncates from the top, the model loses its instructions and tool definitions,
+# and starts inventing pseudo-tools ("google:calendar:create event") with
+# hallucinated dates. Empirically, with every service connected the same
+# request that fails at 8192 produces a perfect tool call at 16384.
+_DEFAULT_NUM_CTX = 16384
+NUM_CTX: int = int(os.getenv("NOVA_NUM_CTX") or _DEFAULT_NUM_CTX)
 LLM_TIMEOUT: float = float(os.getenv("NOVA_LLM_TIMEOUT", "120"))
+# Thinking/reasoning mode for models that support it (qwen3, deepseek-r1...).
+# "true" forces it on, "false" off, unset leaves the model's own default.
+# Thinking costs seconds per turn but is measurably what makes small models
+# get dates and tool arguments right — disable it only for chat-heavy use.
+_reasoning_env = os.getenv("NOVA_REASONING", "").strip().lower()
+REASONING: bool | None = (
+    True if _reasoning_env == "true" else False if _reasoning_env == "false" else None
+)
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+
+# Cloud endpoints are pinned explicitly. Left unset, the provider SDKs fall back
+# to ANTHROPIC_BASE_URL / OPENAI_BASE_URL from the environment, which lets a
+# local-LLM override (e.g. an Ollama URL exported for another tool) silently
+# hijack the cloud path and send /v1/messages to localhost:11434.
+ANTHROPIC_BASE_URL: str = os.getenv(
+    "NOVA_ANTHROPIC_BASE_URL", "https://api.anthropic.com"
+)
+OPENAI_BASE_URL: str = os.getenv("NOVA_OPENAI_BASE_URL", "https://api.openai.com/v1")
 
 
 def _load_persisted_settings() -> None:
@@ -132,9 +156,10 @@ def _build_ollama_kwargs() -> dict:
         "keep_alive": KEEP_ALIVE,
         "client_kwargs": {"timeout": httpx.Timeout(LLM_TIMEOUT)},
         "async_client_kwargs": {"timeout": httpx.Timeout(LLM_TIMEOUT)},
+        "num_ctx": NUM_CTX,
     }
-    if NUM_CTX is not None:
-        kwargs["num_ctx"] = NUM_CTX
+    if REASONING is not None:
+        kwargs["reasoning"] = REASONING
     return kwargs
 
 
@@ -151,6 +176,7 @@ def _build_llm() -> Any | None:
                 model=MODEL_NAME,
                 temperature=TEMPERATURE,
                 api_key=OPENAI_API_KEY,
+                base_url=OPENAI_BASE_URL,
                 timeout=LLM_TIMEOUT,
             )
 
@@ -165,6 +191,7 @@ def _build_llm() -> Any | None:
             return ChatAnthropic(
                 model=MODEL_NAME,
                 api_key=ANTHROPIC_API_KEY,
+                base_url=ANTHROPIC_BASE_URL,
                 timeout=LLM_TIMEOUT,
                 max_tokens=4096,
             )
