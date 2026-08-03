@@ -80,9 +80,12 @@ export async function sendMessageStream(
   sessionId: string,
   message: string,
   callbacks: {
+    onPlan?: (tasks: Array<{ id: string; skill: string; goal: string; depends_on: string[]; agent?: string | null }>) => void;
+    onTaskStart?: (task: { id: string; agent: string; skill: string; goal: string }) => void;
+    onTaskEnd?: (task: { id: string; agent: string; state: 'completed' | 'failed'; artifact?: string; error?: string; elapsed_seconds?: number }) => void;
     onToken: (token: string) => void;
-    onToolStart: (name: string) => void;
-    onToolEnd: (tool: { name: string; result: string }) => void;
+    onToolStart: (name: string, taskId?: string) => void;
+    onToolEnd: (tool: { name: string; result: string }, taskId?: string) => void;
     onDone: (data: {
       response: string;
       tools_used: ToolInfo[];
@@ -129,14 +132,23 @@ export async function sendMessageStream(
       try {
         const event = JSON.parse(line.slice(6)) as StreamEvent;
         switch (event.type) {
+          case 'plan':
+            callbacks.onPlan?.(event.tasks);
+            break;
           case 'token':
             callbacks.onToken(event.content);
             break;
+          case 'task_start':
+            callbacks.onTaskStart?.(event);
+            break;
+          case 'task_end':
+            callbacks.onTaskEnd?.(event);
+            break;
           case 'tool_start':
-            callbacks.onToolStart(event.name);
+            callbacks.onToolStart(event.name, event.task_id);
             break;
           case 'tool_end':
-            callbacks.onToolEnd({ name: event.name, result: event.result });
+            callbacks.onToolEnd({ name: event.name, result: event.result }, event.task_id);
             break;
           case 'done':
             callbacks.onDone(event);

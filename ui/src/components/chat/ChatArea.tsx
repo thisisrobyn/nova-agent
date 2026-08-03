@@ -7,11 +7,38 @@ import { WelcomeScreen } from './WelcomeScreen';
 import { NovaSparkle } from '@/components/ui/NovaSparkle';
 import { MarkdownRenderer } from '@/components/ui/MarkdownRenderer';
 import { ToolBadge } from './ToolBadge';
+import { AgentFlowLive, type TaskStateInfo } from './AgentFlowLive';
 import { GuestBanner } from '@/components/auth/GuestBanner';
 import { useToast } from '@/components/ui/Toast';
 import { useI18n } from '@/lib/i18n';
 import { isSupported, readFile, type FileReadResult } from '@/lib/fileUtils';
-import type { ToolInfo } from '@/lib/types';
+import type { AgentPlanTask, ToolInfo } from '@/lib/types';
+
+/** Rotating placeholder text for the plain (non-orchestrated) waiting state —
+ * there is no per-step diagram to look at there, so the copy itself has to
+ * communicate that something is still happening. */
+const THINKING_PHRASES = [
+  'Reading the conversation…',
+  'Thinking it through…',
+  'Working on a reply…',
+  'Almost there…',
+];
+
+function useCyclingText(phrases: string[], active: boolean, intervalMs = 2800): string {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (!active) {
+      setIndex(0);
+      return;
+    }
+    const timer = setInterval(() => setIndex((i) => (i + 1) % phrases.length), intervalMs);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, intervalMs]);
+
+  return phrases[index];
+}
 
 interface Message {
   id: string;
@@ -20,6 +47,8 @@ interface Message {
   tools_used: { name: string; result: string }[];
   token_usage: Record<string, unknown> | null;
   elapsed_seconds?: number;
+  plan?: AgentPlanTask[];
+  taskStates?: Record<string, TaskStateInfo>;
 }
 
 interface ChatAreaProps {
@@ -31,6 +60,8 @@ interface ChatAreaProps {
   streamingContent: string;
   streamingTools: ToolInfo[];
   statusMessage: string | null;
+  plan?: AgentPlanTask[];
+  taskStates?: Record<string, TaskStateInfo>;
   onSend: (message: string, files?: FileReadResult[]) => void;
   onStop?: () => void;
   onRetry: () => void;
@@ -51,6 +82,8 @@ export function ChatArea({
   streamingContent,
   streamingTools,
   statusMessage,
+  plan = [],
+  taskStates = {},
   onSend,
   onStop,
   onRetry,
@@ -71,6 +104,25 @@ export function ChatArea({
 
   // Show banner after first guest message
   const showGuestBanner = isGuest && guestMessageCount > 0 && (!bannerDismissed || guestLimitReached);
+
+  // Once a plan exists the diagram itself carries the detail, so the fallback
+  // text only needs to name the phase; without one there's nothing else on
+  // screen, so it rotates through a few phrases to read as alive rather than
+  // stuck. Both stop the moment tokens or a tool chip actually start.
+  const orchestrating = plan.length > 0;
+  const allTasksSettled = orchestrating && plan.every((t) => {
+    const s = taskStates[t.id]?.state;
+    return s === 'completed' || s === 'failed';
+  });
+  const cyclingThinkingText = useCyclingText(
+    THINKING_PHRASES,
+    isLoading && !orchestrating && !streamingContent && !statusMessage,
+  );
+  const fallbackWaitingText = orchestrating
+    ? allTasksSettled
+      ? 'Combining what the agents found…'
+      : null
+    : cyclingThinkingText;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -287,6 +339,8 @@ export function ChatArea({
                     elapsed_seconds={msg.elapsed_seconds}
                     isNew={idx >= messages.length - 2}
                     onEdit={msg.role === 'user' && !isLoading ? onEditMessage : undefined}
+                    plan={msg.plan}
+                    taskStates={msg.taskStates}
                   />
                 ))}
               </AnimatePresence>
@@ -296,7 +350,9 @@ export function ChatArea({
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-primary-500">
                     <NovaSparkle className="h-5 w-5" thinking />
                   </div>
-                  <div className="max-w-[75%] rounded-xl border border-surface-700/50 bg-surface-900 px-4 py-3">
+                  <div className="max-w-[75%] space-y-2 rounded-xl border border-surface-700/50 bg-surface-900 px-4 py-3">
+                    {plan.length > 0 && <AgentFlowLive plan={plan} taskStates={taskStates} />}
+
                     {streamingTools.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 pb-1">
                         {streamingTools.map((tool, i) => (
@@ -319,6 +375,23 @@ export function ChatArea({
                         />
                         <span className="text-xs text-surface-400">{statusMessage}</span>
                       </div>
+                    ) : fallbackWaitingText ? (
+                      <AnimatePresence mode="wait">
+                        <motion.div
+                          key={fallbackWaitingText}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          className="flex items-center gap-2"
+                        >
+                          <motion.span
+                            className="h-1.5 w-1.5 rounded-full bg-primary-500"
+                            animate={{ opacity: [0.3, 1, 0.3] }}
+                            transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
+                          />
+                          <span className="text-xs text-surface-400">{fallbackWaitingText}</span>
+                        </motion.div>
+                      </AnimatePresence>
                     ) : (
                       <div className="flex items-center gap-1.5">
                         {[0, 1, 2].map((i) => (

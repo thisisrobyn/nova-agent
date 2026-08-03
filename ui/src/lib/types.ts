@@ -10,6 +10,19 @@ export interface TokenUsage {
   [key: string]: unknown;
 }
 
+/** A plan task merged with its execution outcome, as persisted with a message. */
+export interface AgentTaskState {
+  id: string;
+  skill: string;
+  goal: string;
+  depends_on: string[];
+  agent?: string | null;
+  state: 'pending' | 'working' | 'completed' | 'failed';
+  artifact?: string | null;
+  error?: string | null;
+  elapsed_seconds?: number | null;
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'tool';
   content: string;
@@ -17,6 +30,8 @@ export interface ChatMessage {
   token_usage: TokenUsage | null;
   /** Wall-clock seconds the assistant took to produce this message. */
   elapsed_seconds?: number | null;
+  /** The orchestrator plan that produced this reply, if it was orchestrated. */
+  plan?: AgentTaskState[];
 }
 
 export interface ChatResponse {
@@ -32,6 +47,8 @@ export interface HistoryResponse {
   messages: ChatMessage[];
   total_tokens: number;
   iteration_count: number;
+  /** Whether a background generation is still running server-side for this session. */
+  is_generating?: boolean;
 }
 
 export interface SessionSummary {
@@ -107,20 +124,53 @@ export interface PullProgress {
 
 /* ── Stream events ────────────────────────────────────────── */
 
+export interface AgentPlanTask {
+  id: string;
+  skill: string;
+  goal: string;
+  depends_on: string[];
+  agent?: string | null;
+}
+
+export interface StreamPlanEvent {
+  type: 'plan';
+  tasks: AgentPlanTask[];
+}
+
 export interface StreamTokenEvent {
   type: 'token';
   content: string;
 }
 
+export interface StreamTaskStartEvent {
+  type: 'task_start';
+  id: string;
+  agent: string;
+  skill: string;
+  goal: string;
+}
+
+export interface StreamTaskEndEvent {
+  type: 'task_end';
+  id: string;
+  agent: string;
+  state: 'completed' | 'failed';
+  artifact?: string;
+  error?: string;
+  elapsed_seconds?: number;
+}
+
 export interface StreamToolStartEvent {
   type: 'tool_start';
   name: string;
+  task_id?: string;
 }
 
 export interface StreamToolEndEvent {
   type: 'tool_end';
   name: string;
   result: string;
+  task_id?: string;
 }
 
 export interface StreamDoneEvent {
@@ -151,7 +201,10 @@ export interface StreamStatusEvent {
 }
 
 export type StreamEvent =
+  | StreamPlanEvent
   | StreamTokenEvent
+  | StreamTaskStartEvent
+  | StreamTaskEndEvent
   | StreamToolStartEvent
   | StreamToolEndEvent
   | StreamDoneEvent

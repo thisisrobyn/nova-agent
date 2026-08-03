@@ -23,6 +23,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<ChatPage />} />
       <Route path="/chat" element={<ChatPage />} />
+      <Route path="/chat/:sessionId" element={<ChatPage />} />
       <Route path="/docs" element={<Navigate to="/docs/setup" replace />} />
       <Route path="/docs/:slug" element={<DocsPage />} />
       <Route path="/landing" element={<LandingPage />} />

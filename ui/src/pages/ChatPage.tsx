@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { Sidebar, type ChatHistoryEntry, type ChatFolder } from '@/components/layout/Sidebar';
 import { FolderModal } from '@/components/layout/FolderModal';
@@ -19,6 +20,7 @@ import { generateTitle, clearHistory, listSessions } from '@/lib/api';
 const GUEST_MAX_MESSAGES = 5;
 const HISTORY_STORAGE_KEY = 'nova-chat-history';
 const FOLDERS_STORAGE_KEY = 'nova-chat-folders';
+const ACTIVE_SESSION_STORAGE_KEY = 'nova-chat-active-session-v1';
 
 /* ── Persistence helpers ──────────────────────────────────── */
 
@@ -55,7 +57,40 @@ function persistFolders(userId: string, folders: ChatFolder[]) {
 /* ── ChatPage ─────────────────────────────────────────────── */
 
 export function ChatPage() {
-  const [activeSessionId, setActiveSessionId] = useState(() => generateSessionId());
+  const navigate = useNavigate();
+  const { sessionId: sessionIdParam } = useParams<{ sessionId?: string }>();
+
+  // The URL is the source of truth for which chat is open, so reloading (or
+  // sharing a link) lands back on the same conversation. `/` and `/chat`
+  // carry no id — the effect below resolves one (last used, else new) and
+  // redirects into `/chat/:id` so the address bar picks it up immediately.
+  const [activeSessionId, setActiveSessionIdState] = useState(() => {
+    if (sessionIdParam) return sessionIdParam;
+    try {
+      return localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY) ?? generateSessionId();
+    } catch {
+      return generateSessionId();
+    }
+  });
+
+  useEffect(() => {
+    if (sessionIdParam && sessionIdParam !== activeSessionId) {
+      setActiveSessionIdState(sessionIdParam);
+    } else if (!sessionIdParam) {
+      navigate(`/chat/${activeSessionId}`, { replace: true });
+    }
+    // Only react to the URL changing (browser back/forward, external link) —
+    // `activeSessionId` is intentionally excluded so `setActiveSessionId`
+    // below (which navigates first) does not double-fire this effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionIdParam]);
+
+  /** Switch chats by pushing a new URL — the effect above syncs local state. */
+  const setActiveSessionId = useCallback(
+    (id: string) => navigate(`/chat/${id}`),
+    [navigate],
+  );
+
   const [chatHistory, setChatHistory] = useState<ChatHistoryEntry[]>([]);
   const [folders, setFolders] = useState<ChatFolder[]>([]);
   const [showAuth, setShowAuth] = useState(false);
@@ -92,6 +127,8 @@ export function ChatPage() {
     streamingContent,
     streamingTools,
     statusMessage,
+    plan,
+    taskStates,
     send,
     stop,
     retry,
@@ -165,6 +202,14 @@ export function ChatPage() {
   }, [folders, effectiveIsAuthenticated, effectiveUserId]);
 
   useEffect(() => {
+    try {
+      localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, activeSessionId);
+    } catch {
+      /* ignore storage quota / browser restrictions */
+    }
+  }, [activeSessionId]);
+
+  useEffect(() => {
     sessionJustChanged.current = true;
   }, [activeSessionId]);
 
@@ -213,11 +258,11 @@ export function ChatPage() {
 
   const handleNewChat = useCallback(() => {
     setActiveSessionId(generateSessionId());
-  }, []);
+  }, [setActiveSessionId]);
 
   const handleSelectSession = useCallback((id: string) => {
     setActiveSessionId(id);
-  }, []);
+  }, [setActiveSessionId]);
 
   const handleDeleteChat = useCallback(async (id: string) => {
     // Cancel first: a generation left running would persist the session again
@@ -229,7 +274,7 @@ export function ChatPage() {
     if (id === activeSessionId) {
       setActiveSessionId(generateSessionId());
     }
-  }, [activeSessionId]);
+  }, [activeSessionId, setActiveSessionId]);
 
   const handleRenameChat = useCallback((id: string, newTitle: string) => {
     setChatHistory((prev) =>
@@ -285,7 +330,7 @@ export function ChatPage() {
     setFolders([]);
     setActiveSessionId(generateSessionId());
     setShowSettings(false);
-  }, [logout]);
+  }, [logout, setActiveSessionId]);
 
   const openAuth = useCallback(() => setShowAuth(true), []);
   const openSettings = useCallback(() => setShowSettings(true), []);
@@ -341,6 +386,8 @@ export function ChatPage() {
             streamingContent={streamingContent}
             streamingTools={streamingTools}
             statusMessage={statusMessage}
+            plan={plan}
+            taskStates={taskStates}
             onSend={send}
             onStop={stop}
             onRetry={retry}

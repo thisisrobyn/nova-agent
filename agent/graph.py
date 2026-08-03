@@ -43,6 +43,7 @@ def set_mcp_tools(tools: List[BaseTool]) -> None:
     global _mcp_tools, _compiled_graph
     _mcp_tools = list(tools)
     _compiled_graph = _build_and_compile()
+    _invalidate_orchestrator()
     logger.info("Registered %d MCP tool(s) — graph rebuilt", len(_mcp_tools))
 
 
@@ -62,8 +63,24 @@ async def reload_service_tools() -> int:
 
     _service_tools = await get_service_tools()
     _compiled_graph = _build_and_compile()
+    _invalidate_orchestrator()
     logger.info("Registered %d service tool(s) — graph rebuilt", len(_service_tools))
     return len(_service_tools)
+
+
+def _invalidate_orchestrator() -> None:
+    """Drop the A2A workers' cached graphs after the tool set changes.
+
+    Imported lazily: :mod:`agent.orchestrator` imports this module, and the
+    orchestrator is optional — a deployment that never uses it should not pay
+    for importing it.
+    """
+    try:
+        from agent.orchestrator import reset_orchestrator_graph
+
+        reset_orchestrator_graph()
+    except Exception:
+        logger.warning("could not reset the orchestrator graph", exc_info=True)
 
 
 def get_tools() -> List[BaseTool]:

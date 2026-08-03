@@ -117,6 +117,11 @@ def _now_block() -> str:
     )
 
 
+#: Public alias — the A2A workers build their own prompts but need the same
+#: resolved-date table, and duplicating it would let the two drift apart.
+now_block = _now_block
+
+
 # ── Knowledge base (RAG) auto-retrieval ──────────────────────────────
 # Facts/episodes are auto-injected into the prompt, but the knowledge base
 # (uploaded documents) previously depended on the LLM choosing to call the

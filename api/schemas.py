@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -21,6 +21,24 @@ class ToolInfo(BaseModel):
     result: str
 
 
+class A2ATaskState(BaseModel):
+    """A plan task merged with its execution outcome, for history rehydration.
+
+    ``state`` stays "pending" for a task that never got to run — useful when a
+    turn was cancelled mid-plan.
+    """
+
+    id: str
+    skill: str
+    goal: str
+    depends_on: List[str] = Field(default_factory=list)
+    agent: Optional[str] = None
+    state: Literal["pending", "working", "completed", "failed"] = "pending"
+    artifact: Optional[str] = None
+    error: Optional[str] = None
+    elapsed_seconds: Optional[float] = None
+
+
 class ChatMessage(BaseModel):
     """A single message in the conversation history."""
 
@@ -30,6 +48,8 @@ class ChatMessage(BaseModel):
     token_usage: Optional[Dict[str, Any]] = None
     #: Wall-clock seconds the assistant took to produce this message.
     elapsed_seconds: Optional[float] = None
+    #: The orchestrator plan that produced this reply, if it was orchestrated.
+    plan: List[A2ATaskState] = Field(default_factory=list)
 
 
 class ChatResponse(BaseModel):
@@ -49,6 +69,49 @@ class HistoryResponse(BaseModel):
     messages: List[ChatMessage] = Field(default_factory=list)
     total_tokens: int = 0
     iteration_count: int = 0
+    #: Whether a background generation is still running for this session.
+    #: Lets a client that reloaded mid-turn — its SSE connection is gone,
+    #: but the server-side task keeps running — poll until it settles.
+    is_generating: bool = False
+
+
+class A2APlanTask(BaseModel):
+    """One task in an orchestrator plan."""
+
+    id: str
+    skill: str
+    goal: str
+    depends_on: List[str] = Field(default_factory=list)
+    agent: Optional[str] = None
+
+
+class A2APlanEvent(BaseModel):
+    """Planner result emitted during a streaming run."""
+
+    type: Literal["plan"] = "plan"
+    tasks: List[A2APlanTask] = Field(default_factory=list)
+
+
+class A2ATaskStartEvent(BaseModel):
+    """Signal that an agent started work on a task."""
+
+    type: Literal["task_start"] = "task_start"
+    id: str
+    agent: str
+    skill: str
+    goal: str
+
+
+class A2ATaskEndEvent(BaseModel):
+    """Signal that an agent finished a task."""
+
+    type: Literal["task_end"] = "task_end"
+    id: str
+    agent: str
+    state: Literal["completed", "failed"]
+    artifact: Optional[str] = None
+    error: Optional[str] = None
+    elapsed_seconds: Optional[float] = None
 
 
 class SessionSummary(BaseModel):

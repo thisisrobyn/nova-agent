@@ -6,6 +6,7 @@ and falls back to DuckDuckGo when Tavily is unavailable.
 
 from __future__ import annotations
 
+import asyncio
 import os
 
 import structlog
@@ -54,15 +55,18 @@ async def _search_tavily(query: str, max_results: int = 5) -> str | None:
         return None
 
 
+def _ddgs_text(query: str, max_results: int) -> list[dict]:
+    """Blocking DuckDuckGo call — ``duckduckgo_search`` >=8 dropped its async client."""
+    from duckduckgo_search import DDGS
+
+    with DDGS() as ddgs:
+        return ddgs.text(query, max_results=max_results)
+
+
 async def _search_duckduckgo(query: str, max_results: int = 5) -> str:
     """Search using DuckDuckGo (no API key required)."""
     try:
-        from duckduckgo_search import AsyncDDGS
-
-        async with AsyncDDGS() as ddgs:
-            results = []
-            async for r in ddgs.atext(query, max_results=max_results):
-                results.append(r)
+        results = await asyncio.to_thread(_ddgs_text, query, max_results)
 
         if not results:
             return "No results found."

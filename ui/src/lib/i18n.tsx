@@ -466,6 +466,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   return <Ctx.Provider value={{ lang, setLang, t }}>{children}</Ctx.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useI18n(): I18nContext {
   const ctx = useContext(Ctx);
   if (!ctx) throw new Error('useI18n must be used within LanguageProvider');

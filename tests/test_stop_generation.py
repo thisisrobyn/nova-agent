@@ -70,14 +70,14 @@ async def test_cancelled_run_keeps_the_partial_answer(tmp_path, monkeypatch):
         """Streams two tokens, then hangs until cancelled."""
 
         async def astream(self, input_state, config=None, stream_mode=None):
-            handler = config["callbacks"][0]
+            handler = config["configurable"]["token_handler"]
             await handler.on_llm_new_token("Hola ")
             await handler.on_llm_new_token("mun")
             started.set()
             await asyncio.sleep(60)
             yield input_state  # pragma: no cover — never reached
 
-    monkeypatch.setattr(routes, "compiled_graph", _StallingGraph())
+    monkeypatch.setattr(routes, "get_orchestrator_graph", lambda: _StallingGraph())
 
     buffer: asyncio.Queue = asyncio.Queue()
     input_state = {"messages": [], "iteration_count": 0, "total_tokens": 0}
@@ -123,7 +123,7 @@ async def test_cancelling_before_any_token_reports_no_response(tmp_path, monkeyp
             await asyncio.sleep(60)
             yield input_state  # pragma: no cover
 
-    monkeypatch.setattr(routes, "compiled_graph", _StallingGraph())
+    monkeypatch.setattr(routes, "get_orchestrator_graph", lambda: _StallingGraph())
 
     buffer: asyncio.Queue = asyncio.Queue()
     input_state = {

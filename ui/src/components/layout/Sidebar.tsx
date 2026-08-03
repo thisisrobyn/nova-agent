@@ -89,6 +89,11 @@ interface SidebarProps {
   onOpenAppSettings?: () => void;
 }
 
+function FolderGlyph({ icon, className }: { icon: string; className?: string }) {
+  const Icon = getFolderIcon(icon);
+  return <Icon className={className} />;
+}
+
 /* ── 3-dot menu ────────────────────────────────────────────── */
 
 interface ChatMenuProps {
@@ -165,7 +170,7 @@ function ChatMenu({ folders, currentFolderId, onRename, onDelete, onMoveToFolder
                       onClick={(e) => { e.stopPropagation(); setOpen(false); onMoveToFolder(f.id); }}
                       className="flex w-full items-center gap-2 px-3 py-1.5 pl-6 text-left text-[11px] text-surface-300 hover:bg-surface-700/50"
                     >
-                      {(() => { const I = getFolderIcon(f.icon); return <I className="h-3 w-3" />; })()}
+                      <FolderGlyph icon={f.icon} className="h-3 w-3" />
                       <span className="flex-1 truncate">{f.name}</span>
                       {currentFolderId === f.id && <Check className="h-3 w-3 text-primary-500" />}
                     </button>
@@ -360,8 +365,6 @@ function FolderSection({ folder, chats, activeSessionId, runningSessions, allFol
     }
   };
 
-  const FolderIcon = getFolderIcon(folder.icon);
-
   return (
     <div
       className={`mb-1 rounded-lg transition-colors ${dragOver ? 'bg-primary-950/40 ring-1 ring-primary-700/50' : ''}`}
@@ -373,7 +376,7 @@ function FolderSection({ folder, chats, activeSessionId, runningSessions, allFol
       <div className="group flex items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold text-surface-400 hover:bg-surface-800/50">
         <button onClick={() => setCollapsed(!collapsed)} className="flex flex-1 cursor-pointer items-center gap-1.5">
           <ChevronRight className={`h-3 w-3 transition-transform ${collapsed ? '' : 'rotate-90'}`} />
-          <FolderIcon className={`h-3.5 w-3.5 ${dragOver ? 'text-primary-400' : 'text-primary-500'}`} />
+          <FolderGlyph icon={folder.icon} className={`h-3.5 w-3.5 ${dragOver ? 'text-primary-400' : 'text-primary-500'}`} />
           <span className="flex-1 truncate">{folder.name}</span>
           <span className="text-[10px] text-surface-600">{chats.length}</span>
         </button>

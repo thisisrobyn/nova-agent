@@ -5,7 +5,8 @@ import { NovaSparkle } from '@/components/ui/NovaSparkle';
 import { MarkdownRenderer } from '@/components/ui/MarkdownRenderer';
 import { ToolBadge } from './ToolBadge';
 import { TokenCounter } from './TokenCounter';
-import type { TokenUsage } from '@/lib/types';
+import { AgentFlowLive, type TaskStateInfo } from './AgentFlowLive';
+import type { AgentPlanTask, TokenUsage } from '@/lib/types';
 
 interface ChatMessageProps {
   id: string;
@@ -16,6 +17,8 @@ interface ChatMessageProps {
   elapsed_seconds?: number;
   isNew?: boolean;
   onEdit?: (id: string, newContent: string) => void;
+  plan?: AgentPlanTask[];
+  taskStates?: Record<string, TaskStateInfo>;
 }
 
 export function ChatMessage({
@@ -27,6 +30,8 @@ export function ChatMessage({
   elapsed_seconds,
   isNew = false,
   onEdit,
+  plan,
+  taskStates,
 }: ChatMessageProps) {
   const isUser = role === 'user';
   const [editing, setEditing] = useState(false);
@@ -80,6 +85,11 @@ export function ChatMessage({
             : 'border border-surface-700/50 bg-surface-900'
         }`}
       >
+        {/* Orchestrator diagram — folded, expand to review which agent did what */}
+        {!isUser && plan && plan.length > 0 && (
+          <AgentFlowLive plan={plan} taskStates={taskStates ?? {}} collapsible />
+        )}
+
         {/* Tool badges */}
         {tools_used.length > 0 && (
           <div className="flex flex-wrap gap-1.5 pb-1">
