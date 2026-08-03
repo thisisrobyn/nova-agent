@@ -42,14 +42,24 @@ Key `.env` variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `NOVA_PROVIDER` | `ollama` | LLM provider: `ollama`, `openai` or `anthropic` |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
 | `NOVA_MODEL_NAME` | `gemma3:4b` | Chat model |
 | `NOVA_TEMPERATURE` | `0.7` | Creativity (0-2) |
+| `NOVA_NUM_CTX` | `16384` | Ollama context window — smaller values truncate tool schemas |
+| `NOVA_REASONING` | _(model default)_ | Force thinking mode on/off (`qwen3`, `deepseek-r1`…) |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | _(none)_ | Only for the matching cloud provider |
+| `NOVA_PUBLIC_URL` | `http://localhost:5173` | Base URL every OAuth redirect URI is built from |
+| `NOVA_ENCRYPTION_KEY` | _(auto-generated)_ | Fernet key encrypting connection tokens at rest |
 | `TAVILY_API_KEY` | _(none)_ | Optional: Tavily web search API key |
 | `CODE_EXEC_MODE` | `subprocess` | Code execution: `subprocess` or `disabled` |
 | `SCHEDULER_DB_PATH` | `data/nova_scheduler.db` | Scheduler database path |
 | `LANGCHAIN_TRACING_V2` | `false` | Enable LangSmith tracing |
 | `MCP_TRANSPORT` | `http` | MCP transport mode |
+
+OAuth client ids and secrets are **not** set here — enter them in the connections
+setup wizard, which stores them encrypted in the database. See
+[CONNECTIONS.md](CONNECTIONS.md).
 
 ### 4. Install dependencies
 
@@ -105,6 +115,13 @@ LANGCHAIN_API_KEY=your-langsmith-key
 
 Edit `mcp_servers.json` in the project root to add external tool servers. Restart the API server after editing this file.
 
+## Optional: Google, Microsoft and GitHub accounts
+
+To let NOVA work inside your own mail, calendar, files and repositories, register
+the OAuth applications once and then sign in from the sidebar → `connections`.
+The full walkthrough — including the one-click GitHub App and the Microsoft
+script — is in [CONNECTIONS.md](CONNECTIONS.md).
+
 ## Troubleshooting
 
 | Problem | Solution |
@@ -114,3 +131,7 @@ Edit `mcp_servers.json` in the project root to add external tool servers. Restar
 | Port in use | Stop other services on 8000/5173 |
 | ChromaDB errors | Delete `data/chroma/` and re-upload documents |
 | Scheduler not starting | Check `data/` directory is writable |
+| Agent invents tool names / wrong dates | Context window too small — raise `NOVA_NUM_CTX` |
+| `redirect_uri_mismatch` on sign-in | `NOVA_PUBLIC_URL` must match the URI registered with the provider |
+
+More answers in the [FAQ](FAQ.md).

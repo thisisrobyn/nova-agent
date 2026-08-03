@@ -2,6 +2,14 @@ import { useNavigate } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useInView } from 'framer-motion';
 import { useRoadmap, type RoadmapIssue, type RoadmapIteration } from '@/hooks/useRoadmap';
+import {
+  GoogleIcon,
+  MicrosoftIcon,
+  GitHubIcon,
+  OllamaIcon,
+  OpenAIIcon,
+  AnthropicIcon,
+} from '@/components/ui/BrandIcons';
 
 const GITHUB_REPO = 'https://github.com/thisisrober/nova-agent';
 const IS_PROD = import.meta.env.PROD;
@@ -26,6 +34,12 @@ import {
   Zap,
   Shield,
   Server,
+  Lock,
+  Sparkles,
+  Link2,
+  Network,
+  Workflow,
+  Users,
 } from 'lucide-react';
 
 /* ─── Animated Section Wrapper ─── */
@@ -133,7 +147,7 @@ function AnimatedTerminal() {
             transition={{ delay: 2.0 }}
             className="mt-1 text-surface-400"
           >
-            Model: gemma3:4b | Tools: 11 loaded | Memory: ready
+            Model: gemma3:4b | Tools: 30 loaded | Google, GitHub connected
           </motion.div>
 
           <motion.div
@@ -143,7 +157,7 @@ function AnimatedTerminal() {
             className="mt-4"
           >
             <span className="text-primary-400">{'>'}</span>{' '}
-            <span className="text-surface-200">Search the web for the latest Python release</span>
+            <span className="text-surface-200">Any unread mail about the release? Open an issue if so</span>
           </motion.div>
 
           <motion.div
@@ -152,17 +166,26 @@ function AnimatedTerminal() {
             transition={{ delay: 3.0 }}
             className="mt-2 text-surface-300"
           >
-            <span className="text-yellow-400/80">[web_search]</span> Searching...
+            <span className="text-yellow-400/80">[google_list_emails]</span> query=is:unread release
           </motion.div>
 
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 3.5 }}
+            transition={{ delay: 3.3 }}
             className="mt-1 text-surface-300"
           >
-            The latest stable release of Python is{' '}
-            <span className="text-primary-300">3.13.2</span>, released on February 4, 2025.
+            <span className="text-yellow-400/80">[github_create_issue]</span> repo=nova-agent
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 3.6 }}
+            className="mt-1 text-surface-300"
+          >
+            One unread thread from Ana. Opened{' '}
+            <span className="text-primary-300">issue #42</span> with her checklist.
           </motion.div>
 
           <motion.div
@@ -190,6 +213,50 @@ function AnimatedTerminal() {
         </div>
       </div>
     </motion.div>
+  );
+}
+
+/* ─── NOVA acronym (easter egg) ───
+   Hovering — or tapping, on touch — the wordmark spells the name out. The `O`
+   is the one that is about to grow: orchestration is the next milestone, so it
+   carries the hint. */
+const ACRONYM = [
+  { letter: 'N', word: 'eural' },
+  { letter: 'O', word: 'rchestration' },
+  { letter: 'V', word: 'irtual' },
+  { letter: 'A', word: 'gent' },
+];
+
+function NovaAcronym() {
+  const [revealed, setRevealed] = useState(false);
+
+  return (
+    <span
+      className="relative inline-block cursor-help"
+      onMouseEnter={() => setRevealed(true)}
+      onMouseLeave={() => setRevealed(false)}
+      onClick={() => setRevealed((r) => !r)}
+      title="Neural Orchestration & Virtual Agent"
+    >
+      <span className="bg-gradient-to-r from-primary-400 via-primary-300 to-emerald-300 bg-clip-text text-transparent">
+        NOVA
+      </span>
+
+      <motion.span
+        initial={false}
+        animate={{ opacity: revealed ? 1 : 0, y: revealed ? 0 : -6 }}
+        transition={{ duration: 0.25 }}
+        aria-hidden={!revealed}
+        className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 flex -translate-x-1/2 flex-wrap justify-center gap-x-2 whitespace-nowrap rounded-lg border border-surface-700/50 bg-surface-900/95 px-3 py-1.5 text-xs font-normal tracking-normal shadow-xl shadow-black/40 backdrop-blur-sm sm:text-sm"
+      >
+        {ACRONYM.map(({ letter, word }) => (
+          <span key={letter} className="text-surface-400">
+            <span className="font-bold text-primary-400">{letter}</span>
+            {word}
+          </span>
+        ))}
+      </motion.span>
+    </span>
   );
 }
 
@@ -289,6 +356,228 @@ function Stat({ value, label, delay = 0 }: { value: string; label: string; delay
       <div className="text-3xl font-bold text-primary-400 text-glow">{value}</div>
       <div className="mt-1 text-sm text-surface-400">{label}</div>
     </FadeInSection>
+  );
+}
+
+/* ─── Connected services ─── */
+/* Kept in sync with `nova_mcp/servers/*.py` — the tool counts are the length of
+   each module's `TOOLS` list, which is what the agent actually binds. */
+const SERVICES = [
+  {
+    id: 'google',
+    label: 'Google',
+    icon: GoogleIcon,
+    tools: 11,
+    surfaces: ['Gmail', 'Calendar', 'Drive', 'Sheets', 'Docs'],
+    detail: 'Read, search and send mail; create and move calendar events; list Drive files; create spreadsheets and documents.',
+  },
+  {
+    id: 'microsoft',
+    label: 'Microsoft',
+    icon: MicrosoftIcon,
+    tools: 8,
+    surfaces: ['Outlook', 'Calendar', 'OneDrive'],
+    detail: 'Read, search and send Outlook mail; create, update and cancel meetings; browse OneDrive.',
+  },
+  {
+    id: 'github',
+    label: 'GitHub',
+    icon: GitHubIcon,
+    tools: 9,
+    surfaces: ['Repos', 'Issues', 'Pull requests'],
+    detail: 'List and create repositories, read files and commits, triage issues, comment, review open pull requests.',
+  },
+] as const;
+
+const SERVICE_PROMPTS = [
+  'Summarise the unread emails from this morning',
+  'Book a 30-minute review with Ana on Thursday',
+  'Open an issue in nova-agent about the login bug',
+  'Create a spreadsheet with last week’s expenses',
+];
+
+function ConnectedServicesSection() {
+  const navigate = useNavigate();
+
+  return (
+    <section id="connections" className="relative border-t border-surface-700/20 py-32">
+      <div className="mx-auto max-w-6xl px-6">
+        <FadeInSection className="text-center">
+          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-primary-700/30 bg-primary-900/20 px-3 py-1">
+            <Sparkles className="h-3.5 w-3.5 text-primary-400" />
+            <span className="text-xs font-medium text-primary-300">Latest release</span>
+          </div>
+          <h2 className="text-3xl font-bold text-surface-100 sm:text-4xl">
+            Connect your <span className="text-primary-400">own accounts</span>
+          </h2>
+          <p className="mx-auto mt-4 max-w-2xl text-surface-400">
+            Sign in once to Google, Microsoft or GitHub and NOVA works inside your real
+            mail, calendar, files and repositories — 28 extra tools, no API keys pasted
+            into a config file.
+          </p>
+        </FadeInSection>
+
+        <div className="mt-14 grid gap-5 md:grid-cols-3">
+          {SERVICES.map(({ id, label, icon: Icon, tools, surfaces, detail }, i) => (
+            <FadeInSection key={id} delay={i * 0.08}>
+              <div className="group h-full rounded-xl border border-surface-700/30 bg-surface-900/40 p-6 backdrop-blur-sm transition-all duration-300 hover:border-primary-700/40 hover:bg-surface-900/60">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-800/80">
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-surface-100">{label}</h3>
+                  </div>
+                  <span className="rounded-full bg-primary-500/10 px-2.5 py-0.5 font-mono text-[10px] text-primary-300">
+                    {tools} tools
+                  </span>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-1.5">
+                  {surfaces.map((s) => (
+                    <span
+                      key={s}
+                      className="rounded-full border border-surface-700/40 px-2 py-0.5 text-[11px] text-surface-400"
+                    >
+                      {s}
+                    </span>
+                  ))}
+                </div>
+
+                <p className="mt-4 text-sm leading-relaxed text-surface-300">{detail}</p>
+              </div>
+            </FadeInSection>
+          ))}
+        </div>
+
+        {/* Example prompts */}
+        <FadeInSection delay={0.25}>
+          <div className="mt-10 flex flex-wrap items-center justify-center gap-2">
+            {SERVICE_PROMPTS.map((prompt) => (
+              <span
+                key={prompt}
+                className="rounded-full border border-surface-700/30 bg-surface-900/40 px-4 py-2 text-xs text-surface-400"
+              >
+                “{prompt}”
+              </span>
+            ))}
+          </div>
+        </FadeInSection>
+
+        {/* How it stays safe */}
+        <div className="mt-14 grid gap-5 md:grid-cols-3">
+          {[
+            {
+              icon: Link2,
+              title: 'One click to connect',
+              desc: 'The user opens the connections panel and signs in. GitHub registers its own app from a manifest; Microsoft takes a single script.',
+            },
+            {
+              icon: Lock,
+              title: 'Tokens encrypted at rest',
+              desc: 'Access and refresh tokens are Fernet-encrypted in SQLite, refreshed automatically, and the client secret never reaches the browser.',
+            },
+            {
+              icon: Plug,
+              title: 'Real MCP servers',
+              desc: 'Each service is a standalone MCP server, so Claude Desktop or your IDE can use the same tools NOVA does.',
+            },
+          ].map(({ icon: Icon, title, desc }, i) => (
+            <FadeInSection key={title} delay={0.3 + i * 0.05}>
+              <div className="h-full rounded-xl border border-surface-700/30 bg-surface-900/30 p-5">
+                <Icon className="h-5 w-5 text-primary-400" />
+                <h4 className="mt-3 font-semibold text-surface-100">{title}</h4>
+                <p className="mt-1.5 text-sm leading-relaxed text-surface-400">{desc}</p>
+              </div>
+            </FadeInSection>
+          ))}
+        </div>
+
+        <FadeInSection delay={0.45} className="mt-10 text-center">
+          <button
+            onClick={() => navigate('/docs/connections')}
+            className="cursor-pointer inline-flex items-center gap-2 rounded-xl border border-surface-600 px-6 py-3 text-sm text-surface-300 transition-all hover:border-primary-700/50 hover:text-primary-300"
+          >
+            Read the connections guide
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        </FadeInSection>
+      </div>
+    </section>
+  );
+}
+
+/* ─── What's next: multi-agent orchestration ───
+   Pays off the acronym in the hero: the O has been the quiet letter so far. */
+function OrchestrationSection() {
+  return (
+    <section id="next" className="relative border-t border-surface-700/20 py-32">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute top-1/2 left-1/2 h-[400px] w-[700px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary-500/[0.04] blur-[120px]" />
+      </div>
+
+      <div className="relative mx-auto max-w-5xl px-6">
+        <FadeInSection className="text-center">
+          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-surface-600/40 bg-surface-900/50 px-3 py-1">
+            <Workflow className="h-3.5 w-3.5 text-surface-400" />
+            <span className="text-xs font-medium text-surface-300">Next milestone</span>
+          </div>
+          <h2 className="text-3xl font-bold text-surface-100 sm:text-4xl">
+            Multi-agent <span className="text-primary-400">orchestration</span>
+          </h2>
+          <p className="mx-auto mt-4 max-w-2xl text-surface-400">
+            One agent doing everything is a bottleneck. The next milestone splits the work
+            across specialised agents — a planner that decomposes the request, workers that own
+            a domain each, and a supervisor that routes between them and merges the results.
+          </p>
+          <p className="mx-auto mt-3 max-w-2xl text-sm text-surface-500">
+            It is the letter the name has been saving:{' '}
+            <span className="text-surface-300">
+              Neural <span className="text-primary-400">Orchestration</span> &amp; Virtual Agent
+            </span>
+            .
+          </p>
+        </FadeInSection>
+
+        <div className="mt-14 grid gap-5 md:grid-cols-3">
+          {[
+            {
+              icon: Network,
+              title: 'Supervisor routing',
+              desc: 'A LangGraph supervisor decides which agent handles each step, instead of one prompt juggling every tool.',
+            },
+            {
+              icon: Users,
+              title: 'Specialised workers',
+              desc: 'Research, code, and connected-service agents, each with a narrow tool belt — and therefore a context window that fits.',
+            },
+            {
+              icon: Layers,
+              title: 'Shared state',
+              desc: 'Memory, RAG and connections stay in one place, so handing a task between agents does not lose the thread.',
+            },
+          ].map(({ icon: Icon, title, desc }, i) => (
+            <FadeInSection key={title} delay={0.1 + i * 0.06}>
+              <div className="h-full rounded-xl border border-dashed border-surface-700/40 bg-surface-900/30 p-6">
+                <Icon className="h-5 w-5 text-surface-400" />
+                <h3 className="mt-3 font-semibold text-surface-200">{title}</h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-surface-400">{desc}</p>
+              </div>
+            </FadeInSection>
+          ))}
+        </div>
+
+        <FadeInSection delay={0.3} className="mt-8 text-center">
+          <a
+            href="#roadmap"
+            className="inline-flex items-center gap-1.5 text-sm text-surface-400 transition-colors hover:text-primary-300"
+          >
+            Track it on the roadmap
+            <ArrowRight className="h-3.5 w-3.5" />
+          </a>
+        </FadeInSection>
+      </div>
+    </section>
   );
 }
 
@@ -700,6 +989,12 @@ export function LandingPage() {
             <a href="#features" className="text-sm text-surface-300 transition-colors hover:text-primary-400">
               Features
             </a>
+            <a href="#connections" className="group inline-flex items-center gap-1.5 text-sm text-surface-300 transition-colors hover:text-primary-400">
+              Connections
+              <span className="rounded-full bg-primary-500/15 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-primary-300">
+                New
+              </span>
+            </a>
             <a href="#architecture" className="text-sm text-surface-300 transition-colors hover:text-primary-400">
               Architecture
             </a>
@@ -744,10 +1039,17 @@ export function LandingPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
-            className="mb-8 inline-flex items-center gap-2 rounded-full border border-primary-700/30 bg-primary-900/20 px-4 py-1.5"
+            className="mb-8 inline-flex max-w-full flex-wrap items-center justify-center gap-2 rounded-full border border-primary-700/30 bg-primary-900/20 px-4 py-1.5"
           >
             <div className="h-2 w-2 rounded-full bg-primary-400 animate-pulse" />
-            <span className="text-xs text-primary-300">Open Source AI Agent — Powered by Ollama</span>
+            <span className="text-xs text-primary-300">
+              Open Source AI Agent — local by default, cloud when you want it
+            </span>
+            <span className="flex items-center gap-1.5 border-l border-primary-700/30 pl-2 text-primary-300/70">
+              <OllamaIcon className="h-3.5 w-3.5" />
+              <OpenAIIcon className="h-3.5 w-3.5" />
+              <AnthropicIcon className="h-3.5 w-3.5" />
+            </span>
           </motion.div>
 
           {/* Title */}
@@ -758,9 +1060,7 @@ export function LandingPage() {
             className="text-5xl font-bold leading-tight tracking-tight sm:text-6xl md:text-7xl"
           >
             <span className="text-surface-100">Meet </span>
-            <span className="bg-gradient-to-r from-primary-400 via-primary-300 to-emerald-300 bg-clip-text text-transparent">
-              NOVA
-            </span>
+            <NovaAcronym />
           </motion.h1>
 
           {/* Subtitle */}
@@ -770,9 +1070,9 @@ export function LandingPage() {
             transition={{ duration: 0.7, delay: 0.3 }}
             className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-surface-300 sm:text-xl"
           >
-            Neural Orchestration & Virtual Agent. A fully local AI assistant that reasons,
-            searches the web, executes code, and remembers your conversations — all running
-            on your own hardware.
+            An AI assistant that reasons, searches the web, executes code, and remembers your
+            conversations — and now works directly in your Google, Microsoft and GitHub accounts.
+            Runs on a local Ollama model, or on OpenAI or Anthropic if you prefer.
           </motion.p>
 
           {/* CTAs */}
@@ -820,10 +1120,10 @@ export function LandingPage() {
       {/* ─── Stats Bar ─── */}
       <section className="relative border-y border-surface-700/20 bg-surface-900/30 py-16">
         <div className="mx-auto grid max-w-4xl grid-cols-2 gap-8 px-6 md:grid-cols-4">
-          <Stat value="11+" label="Built-in Tools" delay={0} />
-          <Stat value="22" label="API Endpoints" delay={0.1} />
-          <Stat value="100%" label="Local & Private" delay={0.2} />
-          <Stat value="8" label="Core Capabilities" delay={0.3} />
+          <Stat value="39" label="Agent Tools" delay={0} />
+          <Stat value="38" label="API Endpoints" delay={0.1} />
+          <Stat value="3" label="Connected Services" delay={0.2} />
+          <Stat value="9" label="Core Capabilities" delay={0.3} />
         </div>
       </section>
 
@@ -841,7 +1141,13 @@ export function LandingPage() {
             </p>
           </FadeInSection>
 
-          <div className="mt-16 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-16 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            <FeatureCard
+              icon={Link2}
+              title="Connected Accounts"
+              description="Sign in with Google, Microsoft or GitHub and the agent works in your real mail, calendar, files and repositories."
+              delay={0}
+            />
             <FeatureCard
               icon={MessageSquare}
               title="Conversational AI"
@@ -894,6 +1200,9 @@ export function LandingPage() {
         </div>
       </section>
 
+      {/* ─── Connected Services Section ─── */}
+      <ConnectedServicesSection />
+
       {/* ─── Architecture Section ─── */}
       <section id="architecture" className="relative border-t border-surface-700/20 py-32">
         <div className="mx-auto max-w-6xl px-6">
@@ -906,8 +1215,9 @@ export function LandingPage() {
                 </h2>
                 <p className="mt-4 leading-relaxed text-surface-400">
                   Three clean layers — a React frontend, a FastAPI backend, and a LangGraph
-                  agent engine — connected by SSE streaming for real-time responses. Everything
-                  runs locally via Ollama, no cloud APIs required.
+                  agent engine — connected by SSE streaming for real-time responses. The model
+                  behind it is swappable: a local Ollama model out of the box, or OpenAI or
+                  Anthropic selected from the settings panel, without touching the graph.
                 </p>
               </FadeInSection>
 
@@ -922,14 +1232,14 @@ export function LandingPage() {
                 <ArchLayer
                   icon={Server}
                   label="Backend"
-                  tech="FastAPI + Uvicorn + 22 REST Endpoints"
+                  tech="FastAPI + Uvicorn + 38 REST Endpoints"
                   color="#60a5fa"
                   delay={0.2}
                 />
                 <ArchLayer
                   icon={Cpu}
                   label="Agent Engine"
-                  tech="LangGraph + ReAct Loop + Ollama LLM"
+                  tech="LangGraph + ReAct Loop + Ollama / OpenAI / Anthropic"
                   color="#c084fc"
                   delay={0.3}
                 />
@@ -973,7 +1283,8 @@ export function LandingPage() {
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-surface-400">
               The agent decides autonomously which tools to use based on your request.
-              Extend with custom tools or connect external MCP servers.
+              Service tools appear only once you connect the account, so the model's context
+              stays small. Extend with custom tools or connect external MCP servers.
             </p>
           </FadeInSection>
 
@@ -989,6 +1300,9 @@ export function LandingPage() {
                   { name: 'read_csv / read_excel', desc: 'Parse and preview spreadsheet data', icon: Database },
                   { name: 'list_directory', desc: 'Browse files and folders', icon: Terminal },
                   { name: 'count_tokens', desc: 'Track token usage in conversations', icon: Cpu },
+                  { name: 'google_* (11)', desc: 'Gmail, Calendar, Drive, Sheets, Docs', icon: Link2 },
+                  { name: 'microsoft_* (8)', desc: 'Outlook mail, Calendar, OneDrive', icon: Link2 },
+                  { name: 'github_* (9)', desc: 'Repos, files, commits, issues, pull requests', icon: Link2 },
                 ].map(({ name, desc, icon: ToolIcon }, i) => (
                   <div
                     key={name}
@@ -1018,23 +1332,27 @@ export function LandingPage() {
                 <Shield className="h-7 w-7 text-primary-400" />
               </div>
               <h2 className="mt-6 text-3xl font-bold text-surface-100 sm:text-4xl">
-                100% local.{' '}
-                <span className="text-primary-400">100% private.</span>
+                Local by default.{' '}
+                <span className="text-primary-400">Private by design.</span>
               </h2>
               <p className="mt-4 leading-relaxed text-surface-400">
-                NOVA runs entirely on your machine using Ollama. Your conversations, documents,
-                and memory never leave your hardware. No cloud APIs, no telemetry, no data
-                sharing. You own everything.
+                Out of the box NOVA runs entirely on your machine through Ollama: conversations,
+                documents and memory never leave your hardware, and there is no telemetry. Cloud
+                models and connected accounts are opt-in — nothing reaches a third party until
+                you pick one, and the OAuth tokens that make it possible stay encrypted on your
+                own disk.
               </p>
             </FadeInSection>
 
             <FadeInSection delay={0.15}>
               <div className="grid grid-cols-2 gap-4">
                 {[
-                  { label: 'Local LLM', desc: 'Ollama-powered inference' },
+                  { label: 'Your Model', desc: 'Local Ollama, or OpenAI / Anthropic' },
                   { label: 'Local Storage', desc: 'SQLite + ChromaDB on disk' },
-                  { label: 'No Cloud', desc: 'Zero external API calls*' },
+                  { label: 'No Cloud by Default', desc: 'Zero external API calls*' },
                   { label: 'Open Source', desc: 'Fully auditable codebase' },
+                  { label: 'Encrypted Tokens', desc: 'Fernet at rest, secrets server-side' },
+                  { label: 'Revocable', desc: 'Disconnect any account at any time' },
                 ].map(({ label, desc }) => (
                   <div
                     key={label}
@@ -1046,7 +1364,10 @@ export function LandingPage() {
                 ))}
               </div>
               <p className="mt-4 text-xs text-surface-500">
-                * Except optional web search (Tavily/DDG) and MCP servers when explicitly configured.
+                * Except what you switch on yourself: a cloud model provider, web search
+                (Tavily/DDG), external MCP servers, and the Google,
+                Microsoft or GitHub accounts you choose to connect — those calls go to the
+                provider you signed into, and nowhere else.
               </p>
             </FadeInSection>
           </div>
@@ -1074,10 +1395,16 @@ export function LandingPage() {
               delay={0}
             />
             <DocCard
-              title="Capabilities"
-              description="Deep dive into all 8 capabilities: conversations, memory, RAG, web search, code execution, and more."
-              slug="capabilities"
+              title="Connected Services"
+              description="Connect Google, Microsoft and GitHub: one-time app setup, the sign-in flow, what each service can do, and troubleshooting."
+              slug="connections"
               delay={0.05}
+            />
+            <DocCard
+              title="FAQ"
+              description="Short answers to the questions that come up most: models, privacy, connections, memory, errors, and limits."
+              slug="faq"
+              delay={0.075}
             />
             <DocCard
               title="Architecture"
@@ -1087,13 +1414,13 @@ export function LandingPage() {
             />
             <DocCard
               title="API Reference"
-              description="Complete REST API documentation with 22 endpoints, request/response examples, and SSE streaming."
+              description="Complete REST API documentation with 38 endpoints, request/response examples, and SSE streaming."
               slug="api"
               delay={0.15}
             />
             <DocCard
               title="Tools"
-              description="11 built-in tools explained, plus how to create your own custom tools and register them."
+              description="11 built-in tools plus 28 connected-service tools explained, and how to write your own."
               slug="tools"
               delay={0.2}
             />
@@ -1102,6 +1429,18 @@ export function LandingPage() {
               description="Semantic and episodic memory, ChromaDB vector store, document ingestion pipeline, and retrieval."
               slug="memory"
               delay={0.25}
+            />
+            <DocCard
+              title="Capabilities"
+              description="Deep dive into all 9 capabilities: conversations, memory, RAG, web search, code execution, connected services, and more."
+              slug="capabilities"
+              delay={0.3}
+            />
+            <DocCard
+              title="MCP"
+              description="NOVA as MCP client and server, plus the per-account servers that power Google, Microsoft and GitHub."
+              slug="mcp"
+              delay={0.35}
             />
           </div>
 
@@ -1116,6 +1455,9 @@ export function LandingPage() {
           </FadeInSection>
         </div>
       </section>
+
+      {/* ─── What's next: multi-agent orchestration ─── */}
+      <OrchestrationSection />
 
       {/* ─── Project Board / Roadmap Section ─── */}
       <RoadmapSection />
@@ -1132,8 +1474,8 @@ export function LandingPage() {
               Ready to try <span className="text-primary-400">NOVA</span>?
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-surface-400">
-              Start a conversation with your own local AI agent. No sign-up required,
-              no data leaves your machine.
+              Start a conversation with your own AI agent. No sign-up required, and with the
+              default local model, no data leaves your machine.
             </p>
             <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
               <button

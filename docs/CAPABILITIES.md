@@ -141,3 +141,23 @@ This document covers all major capabilities of the NOVA agent, how they work, an
 **Configuration:**
 - Session storage location is determined by the application's data directory configuration.
 - There is no hard limit on session count or history length, though very long histories may affect performance due to context window constraints.
+
+---
+
+## 9. Connected Services
+
+**What it does:** NOVA can act on the user's behalf in Google, Microsoft and GitHub — reading and sending mail, managing calendar events, browsing Drive/OneDrive, creating spreadsheets and documents, and working with repositories, issues and pull requests. That is 28 further tools on top of the built-in ones.
+
+**How it works:** The user signs in once from the connections panel (sidebar → `connections`). NOVA exchanges the OAuth code for tokens server-side, encrypts them with Fernet and stores them in SQLite, refreshing expired access tokens automatically. The same functions are registered twice: as MCP tools for external clients (`nova_mcp/servers/`) and as LangChain tools for NOVA's own graph (`nova_mcp/builtin.py`).
+
+Only services the user is signed into contribute tools. This is a hard requirement rather than an optimisation — tool schemas are large, and binding all of them fills a local model's context window on its own. `agent.graph.reload_service_tools()` re-binds them and rebuilds the graph on connect, disconnect and credential changes, with no restart.
+
+**How to use it:**
+- Operator, once per deployment: register NOVA as an application with each provider through the setup wizard. GitHub registers itself from a manifest in one click; Microsoft has a script; Google is done in its console.
+- User, once per account: open the panel and click **Connect**.
+- Connection state is injected into the system prompt each turn, so a disconnected service makes the agent say so plainly instead of improvising. Every tool also re-resolves its token at call time and returns `NOT_CONNECTED:` or `AUTH_EXPIRED:` if the grant was revoked.
+
+**Configuration:**
+- `NOVA_PUBLIC_URL` — every redirect URI is derived from it.
+- `NOVA_ENCRYPTION_KEY` — Fernet key protecting tokens at rest; auto-generated into `data/.connection_key` if unset.
+- Client ids and secrets live in the encrypted database, not `.env`. See [CONNECTIONS.md](CONNECTIONS.md).

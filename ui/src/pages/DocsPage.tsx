@@ -19,6 +19,8 @@ import {
   X,
   Github,
   FileText,
+  Link2,
+  HelpCircle,
 } from 'lucide-react';
 
 /* ─── Types ─── */
@@ -106,6 +108,20 @@ function UL({ items }: { items: React.ReactNode[] }) {
   );
 }
 
+/* ─── FAQ entry ───
+   A question is a heading in its own right, so it gets the anchor treatment
+   rather than being folded away behind a disclosure the reader has to hunt in. */
+function Q({ q, children }: { q: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-6 rounded-xl border border-surface-700/30 bg-surface-900/30 p-5">
+      <h3 className="mb-2 font-semibold text-surface-100">{q}</h3>
+      <div className="text-sm leading-relaxed text-surface-300 [&>p]:mb-2 [&>p:last-child]:mb-0">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 /* ═══════════════════════════════════════════════════════
    DOCUMENTATION CONTENT
    ═══════════════════════════════════════════════════════ */
@@ -158,14 +174,24 @@ ollama pull nomic-embed-text   # Required for RAG embeddings`}</CodeBlock>
         <Table
           headers={['Variable', 'Default', 'Description']}
           rows={[
+            ['NOVA_PROVIDER', 'ollama', 'LLM provider: ollama, openai or anthropic'],
             ['OLLAMA_BASE_URL', 'http://localhost:11434', 'Ollama server URL'],
             ['NOVA_MODEL_NAME', 'gemma3:4b', 'Chat model'],
             ['NOVA_TEMPERATURE', '0.7', 'Creativity (0-2)'],
+            ['NOVA_NUM_CTX', '16384', 'Ollama context window — smaller values break tool calls'],
+            ['NOVA_REASONING', '(model default)', 'Force thinking mode on/off (qwen3, deepseek-r1…)'],
+            ['NOVA_PUBLIC_URL', 'http://localhost:5173', 'Base URL every OAuth redirect URI is built from'],
+            ['NOVA_ENCRYPTION_KEY', '(auto-generated)', 'Fernet key encrypting connection tokens at rest'],
             ['TAVILY_API_KEY', '(none)', 'Optional: Tavily web search API key'],
             ['CODE_EXEC_MODE', 'subprocess', 'Code execution mode'],
             ['SCHEDULER_DB_PATH', 'data/nova_scheduler.db', 'Scheduler database path'],
           ]}
         />
+        <P>
+          OAuth client ids and secrets are <strong className="text-surface-100">not</strong> set
+          here — enter them in the connections setup wizard, which stores them encrypted in the
+          database.
+        </P>
 
         <H3>4. Install dependencies</H3>
         <CodeBlock lang="bash">{`make install   # or: uv sync && cd ui && npm install`}</CodeBlock>
@@ -199,6 +225,8 @@ ollama pull nomic-embed-text   # Required for RAG embeddings`}</CodeBlock>
             ['Model not available', 'Run ollama pull gemma3:4b'],
             ['Port in use', 'Stop other services on 8000/5173'],
             ['ChromaDB errors', 'Delete data/chroma/ and re-upload documents'],
+            ['Agent invents tool names', 'Context window too small — raise NOVA_NUM_CTX (16384 default)'],
+            ['redirect_uri_mismatch', 'NOVA_PUBLIC_URL must match the URI registered with the provider'],
           ]}
         />
       </>
@@ -282,6 +310,181 @@ ollama pull nomic-embed-text   # Required for RAG embeddings`}</CodeBlock>
           Persistent conversation sessions stored on disk. Each session preserves the full message
           history, allowing users to resume conversations and review past interactions.
         </P>
+
+        <H2>9. Connected Services</H2>
+        <P>
+          Sign in once with Google, Microsoft or GitHub and the agent gains 28 further tools that
+          act on your real account: mail, calendar, files, spreadsheets, documents, repositories,
+          issues and pull requests. Tools are bound only for the services you are actually signed
+          into, so a disconnected provider costs nothing.
+        </P>
+        <UL
+          items={[
+            'Sidebar → connections to sign in; the card flips to your account email',
+            'OAuth tokens are encrypted at rest and refreshed automatically',
+            <>See <strong className="text-surface-100">Connected Services</strong> for the full setup guide</>,
+          ]}
+        />
+      </>
+    ),
+  },
+
+  /* ─── FAQ ─── */
+  {
+    slug: 'faq',
+    title: 'FAQ',
+    icon: HelpCircle,
+    category: 'Getting Started',
+    content: (
+      <>
+        <P>
+          Short answers to the questions that come up most. Each one links on to the page that
+          covers it in full.
+        </P>
+
+        <H2>Models & providers</H2>
+
+        <Q q="Do I need an API key to use NOVA?">
+          <p>
+            No. By default NOVA runs a local model through Ollama, so there is nothing to pay for
+            and nothing to sign up to. API keys are only needed if you switch the provider to
+            OpenAI or Anthropic in the settings panel, or if you want Tavily web search instead
+            of the DuckDuckGo fallback.
+          </p>
+        </Q>
+
+        <Q q="Which model should I use?">
+          <p>
+            gemma3:4b is the default and runs comfortably on a laptop. Tool calling is the part
+            small models struggle with — if the agent misfires on tool arguments, try a larger
+            model or a reasoning model (qwen3, deepseek-r1) with NOVA_REASONING=true. Thinking
+            costs seconds per turn but is measurably what makes small models get dates and tool
+            arguments right.
+          </p>
+        </Q>
+
+        <Q q="Can I use OpenAI or Anthropic instead of Ollama?">
+          <p>
+            Yes. Set NOVA_PROVIDER to openai or anthropic (or switch it in the settings panel)
+            and provide the matching API key. The graph, tools, memory and connections are
+            unchanged — only the model behind them differs.
+          </p>
+        </Q>
+
+        <Q q="Is my data really private?">
+          <p>
+            With the default local model, yes: conversations, memory and uploaded documents live
+            in SQLite and ChromaDB on your own disk, and there is no telemetry. Anything that
+            leaves the machine is something you switched on — a cloud model provider, web search,
+            an external MCP server, or a connected Google/Microsoft/GitHub account.
+          </p>
+        </Q>
+
+        <H2>Connected services</H2>
+
+        <Q q="Why do I have to register an app before connecting my Google account?">
+          <p>
+            Because Google, Microsoft and GitHub all require an application with a client id and
+            secret before granting access to anyone's mailbox or files. It is a one-time step per
+            deployment, not per user. GitHub can register itself in one click, Microsoft takes a
+            single script, and Google's console steps are linked from the wizard.
+          </p>
+        </Q>
+
+        <Q q="Where are my OAuth tokens stored?">
+          <p>
+            Fernet-encrypted in the local SQLite database, under NOVA_ENCRYPTION_KEY. The client
+            secret never reaches the browser, and expired access tokens are refreshed
+            automatically. Disconnecting deletes NOVA's copy; to revoke access entirely, also
+            remove the app from the provider's own permissions page.
+          </p>
+        </Q>
+
+        <Q q="The agent says it can't send an email even though I connected Google.">
+          <p>
+            Tools are bound only for services you are signed into, and the graph rebuilds on
+            connect — but check the connections panel actually shows your account email rather
+            than a Connect button. If it does, the token may have been revoked provider-side; the
+            tool then returns AUTH_EXPIRED and reconnecting fixes it.
+          </p>
+        </Q>
+
+        <Q q="My Google connection stops working after about a week.">
+          <p>
+            The OAuth consent screen is in Testing mode, which caps refresh-token lifetime at 7
+            days. Publish the app in the Google Cloud Console, or simply reconnect.
+          </p>
+        </Q>
+
+        <Q q="I get redirect_uri_mismatch when signing in.">
+          <p>
+            The URI registered with the provider must match{' '}
+            <code className="text-primary-300">
+              {'{NOVA_PUBLIC_URL}/api/v1/connections/{provider}/callback'}
+            </code>{' '}
+            character for character, including scheme and port. Copy it from the wizard rather
+            than typing it.
+          </p>
+        </Q>
+
+        <Q q="Can other apps use these integrations?">
+          <p>
+            Yes — each service is a real MCP server (nova-google, nova-microsoft, nova-github).
+            Point Claude Desktop or your IDE at them with make mcp-google and they work. NOVA's
+            own agent binds the same functions in-process, so it does not pay the transport cost.
+          </p>
+        </Q>
+
+        <H2>Behaviour & errors</H2>
+
+        <Q q="The agent invented a tool name and made up a date.">
+          <p>
+            Almost always a context-window problem. Ollama defaults to 2048 tokens; NOVA's system
+            prompt plus the tool schemas exceed that many times over, so Ollama truncates from the
+            top and the model loses its instructions. NOVA_NUM_CTX defaults to 16384 for this
+            reason — do not lower it with services connected.
+          </p>
+        </Q>
+
+        <Q q="Why does the agent ask which service to use?">
+          <p>
+            Because more than one can do the job. With both Google and Microsoft connected, "send
+            an email" is genuinely ambiguous, so it asks. With only one connected it just acts.
+          </p>
+        </Q>
+
+        <Q q="Does NOVA remember things between sessions?">
+          <p>
+            Yes. Facts are extracted from conversations in the background and injected into later
+            ones, alongside episodic summaries. Both are viewable and clearable from the memory
+            endpoints or the UI.
+          </p>
+        </Q>
+
+        <Q q="Is the code the agent writes sandboxed?">
+          <p>
+            It runs in a subprocess with restricted imports and a timeout. It is a guard rail, not
+            a jail — do not point it at untrusted input and expect containment.
+          </p>
+        </Q>
+
+        <H2>Project</H2>
+
+        <Q q="What does NOVA stand for?">
+          <p>
+            Neural Orchestration &amp; Virtual Agent. The orchestration half is deliberate: the
+            next milestone is multi-agent orchestration — a supervisor routing work to
+            specialised agents rather than one agent juggling every tool.
+          </p>
+        </Q>
+
+        <Q q="Where do I report a bug or follow development?">
+          <p>
+            The GitHub repository and its public project board, both linked from the landing page.
+            Releases are automated with release-please, so the changelog always reflects what
+            shipped.
+          </p>
+        </Q>
       </>
     ),
   },
@@ -492,18 +695,46 @@ def my_new_tool(query: str) -> str:
         <Table
           headers={['Method', 'Endpoint', 'Description']}
           rows={[
+            ['GET', '/chat/history', 'List sessions'],
             ['GET', '/chat/history/{session_id}', 'Get conversation history'],
             ['DELETE', '/chat/history/{session_id}', 'Clear session history'],
+            ['POST', '/chat/stop/{session_id}', 'Stop an in-flight generation'],
             ['POST', '/chat/title', 'Generate title from first message'],
           ]}
         />
 
-        <H2>Settings</H2>
+        <H2>Settings & providers</H2>
         <Table
           headers={['Method', 'Endpoint', 'Description']}
           rows={[
             ['GET', '/settings', 'Get current LLM configuration'],
             ['PUT', '/settings', 'Update LLM configuration'],
+            ['POST', '/providers/test', 'Validate credentials for a provider'],
+            ['GET', '/ollama/models', 'List locally installed models'],
+            ['GET', '/ollama/status', 'Whether the Ollama service is reachable'],
+            ['POST', '/ollama/start', 'Start the local Ollama service'],
+            ['GET', '/ollama/catalog', 'Browse pullable models'],
+            ['POST', '/ollama/pull', 'Pull a model (streamed progress)'],
+          ]}
+        />
+
+        <H2>Connections</H2>
+        <P>
+          OAuth connections to Google, Microsoft and GitHub. See{' '}
+          <strong className="text-surface-100">Connected Services</strong> for the flow these
+          endpoints implement.
+        </P>
+        <Table
+          headers={['Method', 'Endpoint', 'Description']}
+          rows={[
+            ['GET', '/connections', 'State of every provider: configured, connected, account, scopes'],
+            ['POST', '/connections/{provider}/authorize', 'Get the authorization URL for the UI popup'],
+            ['GET', '/connections/{provider}/callback', 'OAuth redirect target — exchanges code for tokens'],
+            ['DELETE', '/connections/{provider}', 'Disconnect the account and delete its tokens'],
+            ['PUT', '/connections/{provider}/credentials', 'Store the app client id/secret (admin)'],
+            ['DELETE', '/connections/{provider}/credentials', 'Forget the app credentials and drop connections (admin)'],
+            ['POST', '/connections/github/setup/manifest', 'Build the GitHub App manifest for one-click registration'],
+            ['GET', '/connections/github/setup/callback', 'GitHub manifest redirect target'],
           ]}
         />
 
@@ -537,6 +768,7 @@ def my_new_tool(query: str) -> str:
             ['POST', '/scheduler/tasks', 'Create new task'],
             ['PUT', '/scheduler/tasks/{id}', 'Update task'],
             ['DELETE', '/scheduler/tasks/{id}', 'Delete task'],
+            ['GET', '/scheduler/tasks/{id}', 'Get a single task'],
             ['GET', '/scheduler/tasks/{id}/logs', 'Get execution logs'],
           ]}
         />
@@ -779,27 +1011,271 @@ TAVILY_API_KEY=your-api-key-here`}</CodeBlock>
       <>
         <H2>Model Context Protocol</H2>
         <P>
-          NOVA can act as both an MCP client (connecting to external tool servers) and an MCP
-          server (exposing its own tools to other agents).
+          MCP is an open standard that lets AI tools talk to each other — one standard plug that
+          works everywhere. NOVA uses it in three ways: as a client, as a server, and as one
+          server per connected account.
         </P>
 
-        <H3>MCP Client</H3>
+        <H2>1. NOVA as MCP client</H2>
         <P>
-          Configure MCP server connections in mcp_servers.json. Tools from external servers are
-          discovered at startup and registered alongside built-in tools.
+          Configure external servers in <code className="text-primary-300">mcp_servers.json</code>{' '}
+          at the project root. They are connected at API startup and their tools are registered
+          alongside the built-in ones.
+        </P>
+        <CodeBlock lang="json">{`{
+  "langchain-docs": {
+    "url": "https://docs.langchain.com/mcp",
+    "transport": "streamable_http"
+  },
+  "filesystem": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user"],
+    "transport": "stdio"
+  }
+}`}</CodeBlock>
+        <P>
+          <code className="text-primary-300">nova_mcp/client.py</code> reads the config and returns
+          LangChain tools; <code className="text-primary-300">api/main.py</code> registers them in
+          the graph.
         </P>
 
-        <H3>MCP Server</H3>
+        <H2>2. NOVA as MCP server</H2>
         <P>
-          NOVA can expose its tools via the MCP protocol, allowing other MCP-compatible agents
-          to use NOVA's capabilities.
+          NOVA exposes its own tools so other MCP-compatible agents (Claude Desktop, IDE plugins)
+          can use them: <code className="text-primary-300">calculator</code>,{' '}
+          <code className="text-primary-300">get_current_datetime</code>,{' '}
+          <code className="text-primary-300">convert_timezone</code>,{' '}
+          <code className="text-primary-300">read_csv</code>,{' '}
+          <code className="text-primary-300">read_excel</code>,{' '}
+          <code className="text-primary-300">read_text_file</code>.
+        </P>
+        <CodeBlock lang="bash">{`make mcp        # stdio — local integrations
+make mcp-http   # http  — remote access`}</CodeBlock>
+
+        <H2>3. Connected-service servers</H2>
+        <P>
+          Three further servers act on the user's own accounts. They read the OAuth tokens stored
+          by the connections panel, so there is nothing to configure per server.
+        </P>
+        <Table
+          headers={['Server', 'Module', 'Tools']}
+          rows={[
+            ['nova-google', 'nova_mcp/servers/google.py', 'Gmail list/read/send, Calendar list/create/update/delete, Drive list, Sheets create/append, Docs create (11)'],
+            ['nova-microsoft', 'nova_mcp/servers/microsoft.py', 'Outlook list/read/send, Calendar list/create/update/delete, OneDrive list (8)'],
+            ['nova-github', 'nova_mcp/servers/github.py', 'Repos list/create, file read, commits, issues list/read/create/comment, pull requests (9)'],
+          ]}
+        />
+        <CodeBlock lang="bash">{`make mcp-google
+make mcp-microsoft
+make mcp-github`}</CodeBlock>
+
+        <H3>Why the agent does not use MCP for them</H3>
+        <P>
+          NOVA's agent runs in the same process, so routing its calls through an MCP transport
+          would add a process spawn and serialisation to every tool call for no benefit.{' '}
+          <code className="text-primary-300">nova_mcp/builtin.py</code> binds the very same
+          functions as LangChain tools — one definition per capability, registered twice.
+        </P>
+        <CodeBlock>{`nova_mcp/servers/google.py::TOOLS
+        ├── mcp.tool()       → external MCP clients (stdio / SSE)
+        └── nova_mcp.builtin → LangChain tools for NOVA's own graph`}</CodeBlock>
+        <P>
+          Only services you are signed into contribute tools. This is a hard requirement, not an
+          optimisation: tool schemas are large, and two dozen of them fill a local model's context
+          window on their own.{' '}
+          <code className="text-primary-300">reload_service_tools()</code> re-binds them and
+          rebuilds the graph on connect, disconnect and credential changes — no restart.
         </P>
 
         <H2>Configuration</H2>
         <Table
           headers={['Variable', 'Default', 'Description']}
           rows={[
-            ['MCP_TRANSPORT', 'http', 'MCP transport mode'],
+            ['MCP_TRANSPORT', 'http', 'Transport for NOVA’s own server: stdio or http'],
+            ['NOVA_NUM_CTX', '16384', 'Context window; below this, tool schemas get truncated'],
+          ]}
+        />
+      </>
+    ),
+  },
+
+  /* ─── Connected Services ─── */
+  {
+    slug: 'connections',
+    title: 'Connected Services',
+    icon: Link2,
+    category: 'Features',
+    content: (
+      <>
+        <H2>What this gives you</H2>
+        <P>
+          NOVA can act on your behalf in Google, Microsoft and GitHub. You sign in once from the
+          UI (sidebar → <strong className="text-surface-100">connections</strong>), NOVA stores
+          the resulting OAuth tokens, and the per-service MCP servers reuse them.
+        </P>
+        <Table
+          headers={['Service', 'Surfaces', 'What the agent can do']}
+          rows={[
+            ['Google', 'Gmail, Calendar, Drive, Sheets, Docs', 'List/read/send mail, create-update-delete events, list Drive files, create spreadsheets and documents (11 tools)'],
+            ['Microsoft', 'Outlook, Calendar, OneDrive', 'List/read/send mail, create-update-delete events, browse OneDrive (8 tools)'],
+            ['GitHub', 'Repos, Issues, Pull requests', 'List/create repos, read files and commits, list-read-create-comment issues, list pull requests (9 tools)'],
+          ]}
+        />
+
+        <H2>Two roles, do not mix them up</H2>
+        <Table
+          headers={['Role', 'What they do', 'How often']}
+          rows={[
+            ['User', 'Opens the panel, clicks Connect, signs in. Nothing else.', 'Once per account'],
+            ['Operator', 'Registers NOVA as an application with each provider.', 'Once per deployment'],
+          ]}
+        />
+        <P>
+          The operator step cannot be skipped: all three providers require an application with a
+          client id and secret before they grant access to anyone's mailbox or files. It is a
+          one-time cost, and the setup wizard makes it as short as each provider allows — GitHub
+          can be registered in a single click.
+        </P>
+
+        <H2>How the flow works</H2>
+        <CodeBlock>{`UI  ──POST /api/v1/connections/{provider}/authorize──►  API
+UI  ◄─────────────── authorize_url ──────────────────  API
+UI  ──opens popup──►  provider consent screen
+                          │  user approves
+                          ▼
+    provider ──redirect──►  GET /api/v1/connections/{provider}/callback
+                                    │  code → access_token + refresh_token
+                                    ▼
+                            connections/store.py  (encrypted SQLite)`}</CodeBlock>
+        <UL
+          items={[
+            'The client secret never reaches the browser — the code-for-token exchange is server-side.',
+            'App credentials and per-user tokens are Fernet-encrypted before hitting SQLite.',
+            'Expired access tokens are refreshed automatically; callers never deal with expiry.',
+          ]}
+        />
+
+        <H2>Before you start</H2>
+        <P>Set the public base URL — every redirect URI is derived from it:</P>
+        <CodeBlock lang="dotenv">{`NOVA_PUBLIC_URL=http://localhost:5173`}</CodeBlock>
+        <P>
+          Use <code className="text-primary-300">http://localhost:5173</code> in development (the
+          Vite dev server proxies <code className="text-primary-300">/api</code>, so the OAuth
+          popup shares an origin with the UI). In production use the real domain.
+        </P>
+        <P>Then set a token-encryption key — otherwise one is generated into data/.connection_key:</P>
+        <CodeBlock lang="bash">{`uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`}</CodeBlock>
+        <CodeBlock lang="dotenv">{`NOVA_ENCRYPTION_KEY=<the generated key>`}</CodeBlock>
+        <P>
+          Changing this key invalidates every stored credential — you will have to reconnect.
+          Client ids and secrets do <strong className="text-surface-100">not</strong> go in .env:
+          enter them in the wizard, where they are stored encrypted and take effect with no
+          restart.
+        </P>
+
+        <H2>1. GitHub — one click</H2>
+        <P>
+          GitHub is the only provider that lets an application register itself, through the app
+          manifest flow.
+        </P>
+        <UL
+          items={[
+            'Connections panel → GitHub → Setup required',
+            'Optionally rename the app (names are unique across GitHub) and pick an owning organization',
+            'Click Create the GitHub App — GitHub opens pre-filled with permissions and callback URL',
+            'Confirm, and NOVA stores the credentials on its own',
+          ]}
+        />
+        <P>
+          The app requests contents, issues, pull_requests, administration (to create repos) and
+          metadata. A GitHub App is used rather than an OAuth App because it can be registered
+          from a manifest and grants per-repository access with short-lived tokens.
+        </P>
+
+        <H2>2. Microsoft — one command</H2>
+        <P>With the Azure CLI installed and az login done:</P>
+        <CodeBlock lang="powershell">{`./scripts/setup_microsoft_app.ps1 -PublicUrl http://localhost:5173`}</CodeBlock>
+        <P>
+          The script creates the app registration, adds the delegated Graph permissions
+          (User.Read, Mail.Read, Mail.Send, Calendars.ReadWrite, Files.ReadWrite, offline_access),
+          generates a secret and prints the values to paste into the wizard. To do it by hand:
+          Azure Portal → Microsoft Entra ID → App registrations → New registration, redirect URI
+          type <strong className="text-surface-100">Web</strong> pointing at
+          /api/v1/connections/microsoft/callback.
+        </P>
+        <P>
+          <strong className="text-surface-100">Gotcha:</strong> setting a specific tenant id in
+          the wizard blocks personal @outlook.com accounts. Leave it as{' '}
+          <code className="text-primary-300">common</code> unless that is what you want.
+        </P>
+
+        <H2>3. Google — guided, but manual</H2>
+        <P>
+          Google exposes no API for creating OAuth clients, so this one is done in the console —
+          the wizard links straight to each page.
+        </P>
+        <UL
+          items={[
+            'Create or pick a project in the Google Cloud Console',
+            'APIs & Services → Library — enable Gmail, Calendar, Drive, Sheets and Docs APIs',
+            'OAuth consent screen — External, add the scopes listed in the wizard, add yourself under Test users',
+            'Credentials → OAuth client ID → Web application, redirect URI /api/v1/connections/google/callback',
+            'Paste the client id and secret into the wizard',
+          ]}
+        />
+        <P>
+          <strong className="text-surface-100">Gotchas:</strong> Gmail and Drive scopes are
+          restricted — while the consent screen is in Testing mode only listed test users can
+          connect and refresh tokens expire after 7 days. Google only returns a refresh token
+          when access_type=offline and prompt=consent are sent; NOVA always sends both.
+        </P>
+
+        <H2>Verify</H2>
+        <CodeBlock lang="bash">{`curl http://localhost:8000/api/v1/connections`}</CodeBlock>
+        <P>
+          Each configured provider shows a <strong className="text-surface-100">Connect</strong>{' '}
+          button instead of the amber <em>Setup required</em> badge. After signing in, the card
+          flips to the connected account's email.{' '}
+          <code className="text-primary-300">credentials_source</code> tells you whether a
+          provider is configured from the database or the environment.
+        </P>
+
+        <H2>What happens when a service is not connected</H2>
+        <P>
+          Only services you are signed into contribute tools — this keeps the model's context
+          window usable. The live connection state is injected into the system prompt each turn,
+          so a disconnected service makes the agent say so plainly instead of improvising. As a
+          second line of defence, every tool resolves its access token at call time and returns a
+          NOT_CONNECTED or AUTH_EXPIRED instruction if the grant was revoked.
+        </P>
+        <P>
+          With both Google and Microsoft connected, a bare "send an email" makes the agent ask
+          which service to use; with only one connected it just uses that one.
+        </P>
+
+        <H2>Troubleshooting</H2>
+        <Table
+          headers={['Symptom', 'Cause']}
+          rows={[
+            ['redirect_uri_mismatch', 'The registered URI differs from {NOVA_PUBLIC_URL}/api/v1/connections/{provider}/callback — they must match character for character.'],
+            ['Amber "Setup required" badge', 'No credentials stored for that provider yet. Open the wizard.'],
+            ['GitHub says the app name is taken', 'App names are unique across all of GitHub. Change it and retry.'],
+            ['"This authorization link has expired"', 'The state lives in memory for 10 minutes; an API restart mid-flow invalidates it. Retry.'],
+            ['Card stays disconnected after sign-in', 'The popup landed on a different origin than the UI. Set NOVA_PUBLIC_URL=http://localhost:5173.'],
+            ['Everything disconnects after a redeploy', 'NOVA_ENCRYPTION_KEY changed, or data/.connection_key was lost. Re-enter credentials.'],
+            ['Google connection dies after ~7 days', 'The consent screen is in Testing mode, which caps refresh-token lifetime. Publish the app, or reconnect.'],
+            ['Agent invents tool names like "google:calendar"', 'Context window too small — the tool schemas were truncated. Raise NOVA_NUM_CTX.'],
+          ]}
+        />
+
+        <H2>Security notes</H2>
+        <UL
+          items={[
+            'Client secrets are encrypted in the database and never sent to the browser — the API only reports whether a provider is configured.',
+            'Access and refresh tokens are encrypted the same way, so the database file alone is not enough to impersonate anyone.',
+            'state is a 32-byte single-use value with a 10-minute TTL, protecting both the sign-in and GitHub manifest callbacks against CSRF.',
+            'Clearing a provider’s credentials also drops every stored connection to it, since those tokens could no longer be refreshed.',
+            'Disconnecting deletes NOVA’s local copy of the tokens. To revoke access entirely, also remove the app from the provider’s account permissions page.',
           ]}
         />
       </>

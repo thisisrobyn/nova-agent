@@ -11,6 +11,7 @@ All endpoints return JSON unless otherwise noted. Errors follow the format `{"de
 - [Chat](#chat)
 - [Settings](#settings)
 - [Ollama](#ollama)
+- [Connections](#connections)
 - [Memory](#memory)
 - [Documents](#documents)
 - [Scheduler](#scheduler)
@@ -135,6 +136,29 @@ Clear the conversation history for a session.
 
 ---
 
+### POST /api/v1/chat/stop/{session_id}
+
+Cancel the in-flight generation for a session. Whatever was streamed before the
+stop is kept as a partial assistant message, so the history matches what the
+user saw on screen. `stopped` is `false` when there was nothing running.
+
+**Response:** `200 OK`
+
+```json
+{
+  "session_id": "abc123",
+  "stopped": true
+}
+```
+
+---
+
+### GET /api/v1/chat/history
+
+List every stored session with its title and last-activity timestamp.
+
+---
+
 ### POST /api/v1/chat/title
 
 Generate a short title from the first message of a conversation.
@@ -209,6 +233,91 @@ List all models available in the connected Ollama instance.
   ]
 }
 ```
+
+### Other Ollama endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/v1/ollama/status` | Whether the Ollama service is reachable |
+| `POST` | `/api/v1/ollama/start` | Start the local Ollama service |
+| `GET` | `/api/v1/ollama/catalog` | Browse pullable models |
+| `POST` | `/api/v1/ollama/pull` | Pull a model (streamed progress) |
+| `POST` | `/api/v1/providers/test` | Validate credentials for a provider |
+
+---
+
+## Connections
+
+OAuth connections to Google, Microsoft and GitHub. See
+[CONNECTIONS.md](CONNECTIONS.md) for the flow these endpoints implement.
+
+### GET /api/v1/connections
+
+Return the connection state of every supported provider.
+
+**Response:**
+
+```json
+{
+  "connections": [
+    {
+      "provider": "google",
+      "label": "Google",
+      "configured": true,
+      "credentials_source": "database",
+      "connected": true,
+      "account_email": "you@gmail.com",
+      "scopes": ["https://www.googleapis.com/auth/gmail.modify"],
+      "required_scopes": ["https://www.googleapis.com/auth/gmail.modify"],
+      "expires_at": "2026-08-03T13:40:00Z",
+      "redirect_uri": "http://localhost:5173/api/v1/connections/google/callback",
+      "supports_auto_setup": false
+    }
+  ],
+  "is_admin": true
+}
+```
+
+`credentials_source` is `database` or `environment`, telling you where the app
+credentials came from.
+
+### POST /api/v1/connections/{provider}/authorize
+
+Return the provider's authorization URL for the UI to open in a popup.
+
+**Query parameters:** `lang` — UI language for the callback page (default `en`).
+
+**Response:**
+
+```json
+{
+  "provider": "google",
+  "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth?...",
+  "state": "cf3f...9a1"
+}
+```
+
+### GET /api/v1/connections/{provider}/callback
+
+The provider's redirect target. Exchanges the code for tokens, stores them
+encrypted and returns a small HTML page that closes the popup. Not called
+directly by clients.
+
+### DELETE /api/v1/connections/{provider}
+
+Disconnect the account and delete NOVA's copy of its tokens. This does not
+revoke the grant provider-side.
+
+### Application setup (admin only)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `PUT` | `/api/v1/connections/{provider}/credentials` | Store the app `client_id` / `client_secret` (plus `tenant_id` for Microsoft) |
+| `DELETE` | `/api/v1/connections/{provider}/credentials` | Forget the app credentials; every connection to that provider is dropped too |
+| `POST` | `/api/v1/connections/github/setup/manifest` | Build the GitHub App manifest for one-click registration |
+| `GET` | `/api/v1/connections/github/setup/callback` | GitHub's manifest redirect target |
+
+Credential changes re-bind the agent's service tools immediately — no restart.
 
 ---
 
