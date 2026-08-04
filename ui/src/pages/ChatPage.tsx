@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { Sidebar, type ChatHistoryEntry, type ChatFolder } from '@/components/layout/Sidebar';
 import { FolderModal } from '@/components/layout/FolderModal';
@@ -9,6 +10,8 @@ import { IntelligencePanel } from '@/components/intelligence/IntelligencePanel';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { SchedulerPanel } from '@/components/scheduler/SchedulerPanel';
 import { ConnectionsPanel } from '@/components/connections/ConnectionsPanel';
+import { SystemDock } from '@/components/system/SystemDock';
+import { SystemMonitorButton } from '@/components/system/SystemMonitorButton';
 import { ToastProvider } from '@/components/ui/Toast';
 import { useChat } from '@/hooks/useChat';
 import { useAuth } from '@/hooks/useAuth';
@@ -55,7 +58,54 @@ function persistFolders(userId: string, folders: ChatFolder[]) {
 /* ── ChatPage ─────────────────────────────────────────────── */
 
 export function ChatPage() {
-  const [activeSessionId, setActiveSessionId] = useState(() => generateSessionId());
+  const navigate = useNavigate();
+  const { sessionId: sessionIdParam } = useParams<{ sessionId?: string }>();
+
+  // The URL is the source of truth for which chat is open, so reloading (or
+  // sharing a link) lands back on the same conversation. `/new-chat`
+  // deliberately does NOT fall back to a remembered session — that previously
+  // made a bare reload silently reopen whatever chat happened to be active
+  // last, with the sidebar highlighting it as if the user had picked it.
+  //
+  // An unstarted chat holds its id locally without putting it in the URL: an
+  // address bar full of uuids for conversations that were never sent is noise,
+  // and the id only becomes meaningful — shareable, reloadable — once there is
+  // something behind it. `promoteToStartedChat` puts it there on first send.
+  const [activeSessionId, setActiveSessionIdState] = useState(() => sessionIdParam ?? generateSessionId());
+  const isDraft = !sessionIdParam;
+
+  useEffect(() => {
+    if (sessionIdParam) {
+      setActiveSessionIdState((current) => (sessionIdParam !== current ? sessionIdParam : current));
+      return;
+    }
+    // Back on /new-chat — mint a fresh id rather than reusing whatever
+    // `activeSessionId` currently holds. Without this, navigating from an open
+    // chat to /new-chat would reopen the same conversation, because the
+    // component was already mounted and only the URL had changed.
+    setActiveSessionIdState(generateSessionId());
+  }, [sessionIdParam]);
+
+  /** Switch chats by pushing a new URL — the effect above syncs local state. */
+  const setActiveSessionId = useCallback(
+    (id: string) => navigate(`/chat/${id}`),
+    [navigate],
+  );
+
+  /** Start a fresh, unstarted chat. */
+  const goToNewChat = useCallback(() => navigate('/new-chat'), [navigate]);
+
+  /**
+   * Move a draft chat into the URL, now that it has a message behind it.
+   *
+   * `replace`, not push: the empty /new-chat the user just left is not a step
+   * worth going back to, and leaving it in the history would send Back to a
+   * blank chat rather than out of the conversation.
+   */
+  const promoteToStartedChat = useCallback(() => {
+    if (isDraft) navigate(`/chat/${activeSessionId}`, { replace: true });
+  }, [isDraft, activeSessionId, navigate]);
+
   const [chatHistory, setChatHistory] = useState<ChatHistoryEntry[]>([]);
   const [folders, setFolders] = useState<ChatFolder[]>([]);
   const [showAuth, setShowAuth] = useState(false);
@@ -64,6 +114,7 @@ export function ChatPage() {
   const [showAppSettings, setShowAppSettings] = useState(false);
   const [showScheduler, setShowScheduler] = useState(false);
   const [showConnections, setShowConnections] = useState(false);
+  const [showSystemDock, setShowSystemDock] = useState(false);
   const [folderModal, setFolderModal] = useState<{ open: boolean; editing: ChatFolder | null }>({
     open: false,
     editing: null,
@@ -92,6 +143,8 @@ export function ChatPage() {
     streamingContent,
     streamingTools,
     statusMessage,
+    plan,
+    taskStates,
     send,
     stop,
     retry,
@@ -168,6 +221,16 @@ export function ChatPage() {
     sessionJustChanged.current = true;
   }, [activeSessionId]);
 
+  // Name the browser tab after the open conversation, so several NOVA tabs
+  // are told apart without switching to them.
+  const activeChatTitle = chatHistory.find((e) => e.id === activeSessionId)?.title;
+  useEffect(() => {
+    document.title = activeChatTitle ? `${activeChatTitle} — NOVA` : 'NOVA — AI Agent';
+    return () => {
+      document.title = 'NOVA — AI Agent';
+    };
+  }, [activeChatTitle]);
+
   useEffect(() => {
     if (!effectiveIsAuthenticated || messages.length === 0) return;
 
@@ -211,13 +274,28 @@ export function ChatPage() {
 
   /* ── Session handlers ───────────────────────────────────── */
 
+  /**
+   * The first message is what actually creates the chat.
+   *
+   * The send goes out against the id this page already holds, so nothing waits
+   * on the navigation — the URL catching up is a cosmetic follow-up, not a
+   * step the request depends on.
+   */
+  const handleSend = useCallback(
+    (message: string, files?: Parameters<typeof send>[1]) => {
+      send(message, files);
+      promoteToStartedChat();
+    },
+    [send, promoteToStartedChat],
+  );
+
   const handleNewChat = useCallback(() => {
-    setActiveSessionId(generateSessionId());
-  }, []);
+    goToNewChat();
+  }, [goToNewChat]);
 
   const handleSelectSession = useCallback((id: string) => {
     setActiveSessionId(id);
-  }, []);
+  }, [setActiveSessionId]);
 
   const handleDeleteChat = useCallback(async (id: string) => {
     // Cancel first: a generation left running would persist the session again
@@ -227,9 +305,9 @@ export function ChatPage() {
     await clearHistory(id);
     setChatHistory((prev) => prev.filter((e) => e.id !== id));
     if (id === activeSessionId) {
-      setActiveSessionId(generateSessionId());
+      goToNewChat();
     }
-  }, [activeSessionId]);
+  }, [activeSessionId, goToNewChat]);
 
   const handleRenameChat = useCallback((id: string, newTitle: string) => {
     setChatHistory((prev) =>
@@ -283,9 +361,9 @@ export function ChatPage() {
     chatRuns.discardAll();
     setChatHistory([]);
     setFolders([]);
-    setActiveSessionId(generateSessionId());
+    goToNewChat();
     setShowSettings(false);
-  }, [logout]);
+  }, [logout, goToNewChat]);
 
   const openAuth = useCallback(() => setShowAuth(true), []);
   const openSettings = useCallback(() => setShowSettings(true), []);
@@ -331,27 +409,47 @@ export function ChatPage() {
   return (
     <ToastProvider>
       <div className="relative flex h-screen overflow-hidden">
-        <main className="flex-1 overflow-hidden">
-          <ChatArea
-            messages={messages}
-            isLoading={isLoading}
-            isLoadingHistory={isLoadingHistory}
-            historyUnavailable={historyUnavailable}
-            error={error}
-            streamingContent={streamingContent}
-            streamingTools={streamingTools}
-            statusMessage={statusMessage}
-            onSend={send}
-            onStop={stop}
-            onRetry={retry}
-            onEditMessage={editMessage}
-            isGuest={effectiveIsGuest}
-            guestMessageCount={userMessageCount}
-            guestMaxMessages={GUEST_MAX_MESSAGES}
-            guestLimitReached={guestLimitReached}
-            onLogin={openAuth}
-          />
+        {/* Column, not a single pane: the resource dock takes the bottom of
+            the chat and the conversation shrinks above it instead of being
+            covered by an overlay. */}
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="relative min-h-0 flex-1">
+            <ChatArea
+              messages={messages}
+              isLoading={isLoading}
+              isLoadingHistory={isLoadingHistory}
+              historyUnavailable={historyUnavailable}
+              error={error}
+              streamingContent={streamingContent}
+              streamingTools={streamingTools}
+              statusMessage={statusMessage}
+              plan={plan}
+              taskStates={taskStates}
+              onSend={handleSend}
+              onStop={stop}
+              onRetry={retry}
+              onEditMessage={editMessage}
+              isGuest={effectiveIsGuest}
+              guestMessageCount={userMessageCount}
+              guestMaxMessages={GUEST_MAX_MESSAGES}
+              guestLimitReached={guestLimitReached}
+              onLogin={openAuth}
+            />
+
+            {/* Signed-in only: it reports the machine NOVA runs on, not the
+                visitor's. */}
+            <AnimatePresence>
+              {effectiveIsAuthenticated && !showSystemDock && (
+                <SystemMonitorButton onClick={() => setShowSystemDock(true)} />
+              )}
+            </AnimatePresence>
+          </div>
+
+          {effectiveIsAuthenticated && (
+            <SystemDock open={showSystemDock} onClose={() => setShowSystemDock(false)} />
+          )}
         </main>
+
         {effectiveIsAuthenticated && (
           <Sidebar
             chatHistory={chatHistory}

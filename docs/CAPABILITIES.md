@@ -8,7 +8,7 @@ This document covers all major capabilities of the NOVA agent, how they work, an
 
 **What it does:** NOVA is a multi-turn conversational agent that reasons about tasks, selects tools when needed, and produces coherent responses. It uses a ReAct (Reason + Act) loop implemented as a LangGraph state graph.
 
-**How it works:** Each user message enters the LangGraph state graph. The agent node calls the Ollama LLM, which decides whether to respond directly or invoke a tool. If a tool is called, the result feeds back into the graph for another reasoning step. This loop continues until the agent produces a final answer. Token usage is tracked across all iterations.
+**How it works:** Each user message enters the orchestrator graph, which first asks whether the request is worth splitting across several agents (capability 10). Most are not, and those fall through to the single-agent ReAct loop described here: the agent node calls the LLM, which decides whether to respond directly or invoke a tool. If a tool is called, the result feeds back into the graph for another reasoning step. This loop continues until the agent produces a final answer. Token usage is tracked across all iterations.
 
 **How to use it:**
 - Send messages via the REST API (`POST /api/v1/chat`) or the CLI (`uv run nova`).
@@ -161,3 +161,24 @@ Only services the user is signed into contribute tools. This is a hard requireme
 - `NOVA_PUBLIC_URL` — every redirect URI is derived from it.
 - `NOVA_ENCRYPTION_KEY` — Fernet key protecting tokens at rest; auto-generated into `data/.connection_key` if unset.
 - Client ids and secrets live in the encrypted database, not `.env`. See [CONNECTIONS.md](CONNECTIONS.md).
+
+---
+
+## 10. Multi-Agent Orchestration (A2A)
+
+**What it does:** A request containing several independent jobs — *"book me a slot on Friday, research the competition and draft a summary"* — is decomposed into a task graph and worked on by specialised agents in parallel, then merged into a single reply. The chat shows the run as it happens: which agent is working, which tool it is calling right now, what each one cost.
+
+**How it works:** A planner turns the request into a DAG of tasks, each naming a *skill* rather than an agent. The executor runs the DAG in dependency waves, so independent tasks overlap instead of queueing. Every task runs under a budget (steps, tool calls, wall clock, repeated calls); hitting a limit stops the tool loop but does not fail the task — the agent answers from what it already gathered. Failures are contained per task: transient ones are retried, wrong approaches are replanned once, and a task whose dependency produced nothing is skipped rather than sent to invent an answer. The aggregator then merges the artifacts, reporting honestly on whatever did not work.
+
+Splitting is not free, so the planner is allowed to decline. A plan of fewer than two tasks routes the turn to the single-agent graph instead — the path most turns take. See [MULTI_AGENT.md](MULTI_AGENT.md) for the graph, the budgets and the failure modes.
+
+**How to use it:**
+- Nothing to switch on. Ask for several things at once and the split happens by itself.
+- Watch it live in the chat, or expand the diagram to see the full activity log per agent.
+- `GET /api/v1/agents` lists the internal agents and whether their provider is connected.
+- Point `NOVA_A2A_PEERS` at other A2A-speaking agents to add their skills to the planner's catalogue; matching tasks are then dispatched over JSON-RPC instead of running in-process.
+
+**Configuration:**
+- `NOVA_TASK_MAX_STEPS`, `NOVA_TASK_MAX_TOOL_CALLS`, `NOVA_TASK_MAX_SECONDS`, `NOVA_TASK_MAX_REPEATS` — the per-task budget.
+- `NOVA_TASK_MAX_ATTEMPTS` — how many times a transient failure is retried.
+- `NOVA_A2A_PEERS` — comma-separated base URLs of remote agents.

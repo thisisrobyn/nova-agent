@@ -111,6 +111,39 @@ LANGCHAIN_TRACING_V2=true
 LANGCHAIN_API_KEY=your-langsmith-key
 ```
 
+## Optional: tuning the multi-agent runs
+
+When NOVA splits a request across several agents, each task runs under an
+execution budget. Hitting a limit does not fail the task — the agent stops
+calling tools and answers with what it already gathered. The defaults suit a
+local model on a normal machine; raise them on a fast one, lower them if runs
+feel long.
+
+```env
+NOVA_TASK_MAX_STEPS=6          # LLM calls per task
+NOVA_TASK_MAX_TOOL_CALLS=8     # tool invocations per task
+NOVA_TASK_MAX_SECONDS=180      # wall clock per task
+NOVA_TASK_MAX_REPEATS=1        # repeats of the same call before it counts as circling
+NOVA_TASK_MAX_ATTEMPTS=2       # attempts per task, retries included
+```
+
+The knob to reach for first is `NOVA_TASK_MAX_TOOL_CALLS`: a research agent
+that feels like it is searching forever is searching within its budget, and
+lowering it trades thoroughness for speed directly.
+
+## Optional: other A2A agents
+
+Point NOVA at other agents that publish an Agent Card, and their skills join
+the planner's catalogue:
+
+```env
+NOVA_A2A_PEERS=https://acme.example,https://research.internal
+```
+
+An unreachable peer is simply left out, and a peer can never shadow a built-in
+skill. NOVA itself answers on `{NOVA_PUBLIC_URL}/a2a`, so two instances can
+peer with each other. Details in [MULTI_AGENT.md](MULTI_AGENT.md).
+
 ## Connecting MCP servers
 
 Edit `mcp_servers.json` in the project root to add external tool servers. Restart the API server after editing this file.

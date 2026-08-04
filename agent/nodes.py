@@ -80,6 +80,10 @@ SYSTEM_PROMPT = (
     "- Never contradict yourself inside a single reply: do not offer to do something "
     "and then claim you cannot, and do not describe manual steps for a task you just "
     "performed or are able to perform with a tool.\n"
+    "- When a tool returns a URL for something you created or found (a calendar "
+    "event, a document, a repository), give it to the user as a Markdown link on "
+    "a meaningful title — [Estudiar LangGraph](https://…) — never as a bare URL "
+    "and never as a raw id. The interface renders it as a clickable link.\n"
     "- If a tool returns an error, explain the issue clearly and try an alternative "
     "approach when possible.\n"
     "- Current working directory: {cwd}\n"
@@ -115,6 +119,11 @@ def _now_block() -> str:
         f"Resolve every relative date against this table — never ask the user "
         f"what date a weekday falls on."
     )
+
+
+#: Public alias — the A2A workers build their own prompts but need the same
+#: resolved-date table, and duplicating it would let the two drift apart.
+now_block = _now_block
 
 
 # ── Knowledge base (RAG) auto-retrieval ──────────────────────────────

@@ -5,8 +5,10 @@
 | Package | Version | What it does |
 |---------|---------|-------------|
 | `langchain` | >= 1.1.3 | Framework for building LLM apps |
-| `langgraph` | >= 1.0.4 | State machine for the agent loop |
-| `langchain-ollama` | >= 0.3.0 | Connect to local Ollama models |
+| `langgraph` | >= 1.0.4 | State machine for the agent loop *and* the multi-agent supervisor |
+| `langchain-ollama` | >= 0.3.2 | Connect to local Ollama models (the default backend) |
+| `langchain-openai` | >= 0.2.0 | Optional cloud provider |
+| `langchain-anthropic` | >= 0.3.0 | Optional cloud provider |
 | `fastapi` | >= 0.115.0 | REST API framework (async) |
 | `uvicorn` | >= 0.34.0 | ASGI server to run FastAPI |
 | `langchain-mcp-adapters` | >= 0.1.0 | Connect to external MCP tool servers |
@@ -24,11 +26,16 @@
 | `tavily-python` | >= 0.5.0 | Web search API (optional) |
 | `duckduckgo-search` | >= 7.0.0 | Free web search fallback |
 | `sqlalchemy` | >= 2.0.0 | ORM used by APScheduler job store |
+| `python-jose[cryptography]` | >= 3.4.0 | JWT auth, and Fernet encryption for stored credentials |
+| `httpx` | >= 0.28.0 | Async HTTP: Ollama, OAuth token exchange, A2A peers |
+| `psutil` | >= 6.0.0 | Host CPU / RAM counters for the system panel |
 
 **Python version:** 3.11+
 **Package manager:** [uv](https://github.com/astral-sh/uv)
 
-Note: `langchain-openai` has been replaced by `langchain-ollama`. The project migrated to a fully local Ollama backend.
+Note: Ollama is the default and nothing leaves the machine with it. OpenAI and
+Anthropic remain selectable at runtime from the settings panel — see
+`agent/llm.py` and the `NOVA_PROVIDER` variable.
 
 ## Frontend (TypeScript)
 

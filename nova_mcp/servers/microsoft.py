@@ -20,6 +20,7 @@ from nova_mcp.servers._common import (
     ServiceError,
     bullet_list,
     call_api,
+    event_result,
     truncate,
 )
 
@@ -227,7 +228,10 @@ async def microsoft_create_calendar_event(
     except ServiceError as exc:
         return str(exc)
 
-    return f"Event '{subject}' created: {event.get('webLink', '(no link)')}"
+    event = event or {}
+    return event_result(
+        "created", subject, event.get("id", ""), event.get("webLink", "")
+    )
 
 
 async def microsoft_update_calendar_event(
@@ -271,7 +275,13 @@ async def microsoft_update_calendar_event(
     except ServiceError as exc:
         return str(exc)
 
-    return f"Event updated: {event.get('webLink', event_id)}"
+    event = event or {}
+    return event_result(
+        "updated",
+        subject or event.get("subject", ""),
+        event.get("id", event_id),
+        event.get("webLink", ""),
+    )
 
 
 async def microsoft_delete_calendar_event(event_id: str) -> str:

@@ -29,6 +29,7 @@ export function ChatInput({ onSend, isLoading, onStop, externalFiles, onExternal
   }, [isLoading]);
 
   // Merge in externally dropped files
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if (externalFiles && externalFiles.length > 0) {
       setFiles((prev) => {

@@ -15,6 +15,7 @@ All endpoints return JSON unless otherwise noted. Errors follow the format `{"de
 - [Memory](#memory)
 - [Documents](#documents)
 - [Scheduler](#scheduler)
+- [A2A (agent-to-agent)](#a2a-agent-to-agent)
 - [Health](#health)
 
 ---
@@ -76,11 +77,25 @@ Send a message and receive the response as a Server-Sent Events (SSE) stream.
 | Event | Data | Description |
 |-------|------|-------------|
 | `token` | `{"content": "..."}` | Partial response token |
-| `tool_start` | `{"tool": "calculator", "input": "..."}` | Tool invocation started |
-| `tool_end` | `{"tool": "calculator", "output": "..."}` | Tool invocation completed |
+| `tool_start` | `{"name": "calculator", "task_id": "T1"}` | Tool invocation started. `task_id` is present only during an orchestrated run |
+| `tool_end` | `{"name": "calculator", "result": "...", "task_id": "T1"}` | Tool invocation completed |
 | `status` | `{"message": "..."}` | Status update |
-| `done` | `{"response": "...", "tools_used": [...], "token_usage": {...}, "total_tokens": N, "iteration_count": N}` | Final complete response |
-| `error` | `{"detail": "..."}` | Error occurred |
+| `done` | `{"response": "...", "tools_used": [...], "token_usage": {...}, "total_tokens": N, "iteration_count": N, "elapsed_seconds": N, "cancelled": false}` | Final complete response |
+| `error` | `{"message": "..."}` | Error occurred |
+| `cancelled` | `{}` | Emitted just before `done` when the user pressed stop |
+
+**Orchestration events.** A request that the planner splits across several
+agents also emits the events below, each carrying the `run_id` of that turn.
+A single-agent turn emits none of them. See
+[Multi-agent](MULTI_AGENT.md) for the mechanics.
+
+| Event | Data | Description |
+|-------|------|-------------|
+| `plan` | `{"tasks": [{"id": "T1", "skill": "web.research", "goal": "...", "depends_on": []}]}` | The task DAG, before anything runs |
+| `task_start` | `{"id": "T1", "agent": "research", "skill": "...", "goal": "..."}` | An agent picked up a task |
+| `task_end` | `{"id": "T1", "state": "completed", "artifact": "...", "elapsed_seconds": N, "token_usage": {...}, "note": "..."}` | A task settled. `state` is `completed`, `failed` or `canceled`; `note` explains which execution budget stopped it, when one did |
+| `task_retry` | `{"id": "T1", "attempt": 2, "of": 2, "error": "..."}` | A transient failure is being attempted again |
+| `replan` | `{"round": 1, "tasks": [{"id": "T1r", "repairs": "T1", ...}]}` | The planner replaced failed tasks with a different approach |
 
 **Example:**
 
@@ -110,6 +125,33 @@ Retrieve the conversation history for a session.
   "messages": [
     {"role": "user", "content": "Hello"},
     {"role": "assistant", "content": "Hi there!"}
+  ]
+}
+```
+
+An assistant message produced by an orchestrated turn also carries `run_id` and
+the `plan` behind it, so a reloaded conversation can redraw each reply's agent
+diagram — including the tools each agent called and what it cost:
+
+```json
+{
+  "role": "assistant",
+  "content": "Here you go.",
+  "run_id": "8f2c1a9b4d0e",
+  "plan": [
+    {
+      "id": "T1",
+      "skill": "web.research",
+      "goal": "Find competitor announcements",
+      "depends_on": [],
+      "agent": "research",
+      "state": "completed",
+      "artifact": "…",
+      "elapsed_seconds": 12.4,
+      "tools": [{"name": "web_search", "result": "…"}],
+      "token_usage": {"total_tokens": 1840},
+      "budget_note": null
+    }
   ]
 }
 ```
@@ -659,6 +701,113 @@ Get execution logs for a scheduled task.
     }
   ],
   "total": 1
+}
+```
+
+---
+
+## A2A (agent-to-agent)
+
+Endpoints another AI agent talks to. See [Multi-agent](MULTI_AGENT.md) for how
+NOVA discovers and dispatches to peers.
+
+### GET /.well-known/agent-card.json
+
+NOVA's public Agent Card. Not under `/api/v1`: RFC 8615 pins the path to the
+origin, and a card anywhere else is not discoverable.
+
+The advertised skills reflect *this* deployment — a fresh install offers
+research and advice, and gains calendar and document skills the moment an
+account is connected. Advertising a skill that would fail on every call is
+worse than advertising none.
+
+```json
+{
+  "protocolVersion": "1.0",
+  "name": "NOVA",
+  "description": "Neural Orchestration & Virtual Agent — …",
+  "url": "http://localhost:5173/a2a",
+  "version": "0.7.0",
+  "capabilities": {"streaming": true, "pushNotifications": false},
+  "skills": [
+    {"id": "web.research", "name": "Research a topic", "description": "…"}
+  ]
+}
+```
+
+---
+
+### POST /a2a
+
+The JSON-RPC endpoint the card advertises. Also at the origin, because the URL
+a peer reads from the card must be the URL it can post to.
+
+Only `message/send` is supported. NOVA answers as a **single** agent: it runs
+its whole orchestrator over the request and returns one reply. That the work
+was split across several internal agents is not the caller's business.
+
+`contextId` groups several sends into one conversation, each kept in its own
+session, so a peer gets the same memory a human user would.
+
+**Request:**
+
+```bash
+curl -X POST http://localhost:8000/a2a \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "message/send",
+    "params": {
+      "message": {
+        "role": "user",
+        "messageId": "abc123",
+        "contextId": "conversation-1",
+        "parts": [{"kind": "text", "text": "What did our competitors announce?"}]
+      }
+    }
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "1",
+  "result": {
+    "kind": "message",
+    "role": "agent",
+    "messageId": "…",
+    "contextId": "conversation-1",
+    "parts": [{"kind": "text", "text": "Three announcements this month: …"}]
+  }
+}
+```
+
+Errors come back as JSON-RPC errors with HTTP 200: `-32700` unparseable body,
+`-32600` malformed request or no text part, `-32601` unsupported method,
+`-32603` the run itself failed.
+
+---
+
+### GET /api/v1/a2a/agents
+
+Introspection for NOVA's own UI: the internal agents and whether each can act
+right now. Not protocol — a third-party client never needs it, which is why the
+card does not expose the workers.
+
+```json
+{
+  "agents": [
+    {
+      "id": "research",
+      "name": "Research agent",
+      "skills": [{"id": "web.research", "name": "Research a topic"}],
+      "requires_any": [],
+      "available": true
+    }
+  ]
 }
 ```
 

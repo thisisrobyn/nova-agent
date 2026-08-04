@@ -99,6 +99,7 @@ export function FolderModal({ open, onClose, onSave, initial }: FolderModalProps
   const [icon, setIcon] = useState(initial?.icon ?? 'folder');
 
   // Reset state when modal opens with different initial data
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if (open) {
       setName(initial?.name ?? '');

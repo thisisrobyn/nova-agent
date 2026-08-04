@@ -193,7 +193,7 @@ export function ConnectionsPanel({ open, onClose }: ConnectionsPanelProps) {
     setLoading(true);
     try {
       const result = await refresh();
-      setError(result.connections.length === 0 ? t('conn.loadError') : null);
+      setError(result.ok && result.connections.length > 0 ? null : t('conn.loadError'));
     } finally {
       setLoading(false);
     }

@@ -21,7 +21,9 @@ import {
   FileText,
   Link2,
   HelpCircle,
+  Network,
 } from 'lucide-react';
+import { Mermaid } from '@/components/ui/Mermaid';
 
 /* ─── Types ─── */
 interface DocSection {
@@ -472,9 +474,20 @@ ollama pull nomic-embed-text   # Required for RAG embeddings`}</CodeBlock>
 
         <Q q="What does NOVA stand for?">
           <p>
-            Neural Orchestration &amp; Virtual Agent. The orchestration half is deliberate: the
-            next milestone is multi-agent orchestration — a supervisor routing work to
-            specialised agents rather than one agent juggling every tool.
+            Neural Orchestration &amp; Virtual Agent. The orchestration half is literal: a
+            supervisor graph splits a request across specialised agents rather than making one
+            agent juggle every tool.
+          </p>
+        </Q>
+
+        <Q q="Does every message go through the multi-agent orchestrator?">
+          <p>
+            Every turn enters it, but most come straight back out. Splitting &quot;what time is
+            it?&quot; across four agents is pure overhead, so the planner is allowed to decline —
+            and a plan of fewer than two tasks counts as declining. The turn then runs on the
+            single-agent graph, with the memory and knowledge-base context the workers
+            deliberately do not carry. When it does split, the chat shows the task graph live:
+            which agent is working, which tool it is calling, what each one cost.
           </p>
         </Q>
 
@@ -499,36 +512,50 @@ ollama pull nomic-embed-text   # Required for RAG embeddings`}</CodeBlock>
       <>
         <H2>Overview</H2>
         <P>
-          NOVA follows a ReAct (Reasoning + Acting) pattern powered by LangGraph. The system
-          has three layers: a React 19 frontend, a FastAPI backend, and a LangGraph agent engine
-          connected by SSE streaming.
+          NOVA follows a ReAct (Reasoning + Acting) pattern powered by LangGraph. The system has
+          four layers: a React 19 frontend, a FastAPI backend, an orchestrator that decides
+          whether a request is worth splitting across specialised agents, and the single-agent
+          graph it falls back to — all connected by SSE streaming.
+        </P>
+        <P>
+          The last two are alternatives, not a stack. Every turn enters the orchestrator; a
+          request it declines to split runs on the single-agent graph, which is the path most
+          turns take.
         </P>
 
         <H2>Message Flow</H2>
-        <CodeBlock lang="text">{`Browser (React 19)     Server (FastAPI)      Agent (LangGraph)
-    User types msg
-         |
-    POST /chat/stream --> SSE streaming endpoint
-                              |
-                        Create input state
-                        Inject memory_context
-                              |
-                        Pass to agent -------> agent_node
-                                                  |
-                                             LLM decides:
-                                             needs tool?
-                                             /         \\
-                                           Yes          No
-                                            |            |
-                                       tools node     respond
-                                       (execute)        |
-                                            |            |
-                                       back to       <--+
-                                       agent_node
-                              |
-                   <-- SSE tokens ----------+
-         |
-    Render tokens`}</CodeBlock>
+        <Mermaid
+          chart={`flowchart TD
+    subgraph browser["Browser — React 19"]
+        U["User types a message"]
+        RENDER["Answer streams in word by word<br/>live agent diagram updates as it goes"]
+    end
+
+    subgraph server["Server — FastAPI"]
+        SSE["POST /chat/stream<br/>detached background task"]
+        STATE["Build the input state<br/>inject memory_context"]
+        BUF[("SSE event buffer")]
+        BG["Fire-and-forget: extract facts,<br/>summarise the episode"]
+    end
+
+    subgraph orchestrator["Orchestrator — LangGraph"]
+        PLAN["planner"]
+        WORK["executor<br/>specialised agents, in parallel"]
+        MERGE["aggregator"]
+        SINGLE["fallback<br/>single-agent ReAct loop"]
+    end
+
+    U --> SSE --> STATE --> PLAN
+    PLAN -- "plan" --> WORK --> MERGE
+    PLAN -- "no plan" --> SINGLE
+    WORK -. "plan · task · tool events" .-> BUF
+    MERGE -. "answer tokens" .-> BUF
+    SINGLE -. "answer tokens · tool events" .-> BUF
+    BUF --> RENDER
+    MERGE --> BG
+    SINGLE --> BG`}
+          caption="One chat turn, from keystroke to streamed answer."
+        />
 
         <H2>Agent State (NOVAState)</H2>
         <Table
@@ -543,7 +570,61 @@ ollama pull nomic-embed-text   # Required for RAG embeddings`}</CodeBlock>
           ]}
         />
 
-        <H2>Graph Nodes</H2>
+        <H2>Orchestrator Nodes</H2>
+        <P>
+          The supervisor graph every turn enters first. It owns the decision of how many agents a
+          request deserves; the single-agent graph below owns what one agent does with its tools.
+        </P>
+        <Mermaid
+          chart={`flowchart TD
+    START(["START"]) --> P["planner<br/>request → task DAG"]
+    P -- "plan" --> E["executor<br/>runs the DAG in dependency waves"]
+    P -- "no plan" --> F["fallback<br/>single-agent graph"]
+    E -- "failures?" --> R["repair<br/>replacement tasks from the planner"]
+    R -- "replacements" --> E
+    R -- "nothing to replace" --> A["aggregator<br/>artifacts → one answer"]
+    E -- "all settled" --> A
+    A --> FIN(["END"])
+    F --> FIN`}
+          caption="The supervisor graph, and the fallback most turns take."
+        />
+
+        <H3>planner_node</H3>
+        <P>
+          Turns the request — plus a bounded slice of the conversation, so a follow-up like
+          &quot;and now the same for Friday&quot; is plannable at all — into a DAG of tasks, each
+          naming a skill rather than an agent. Returning fewer than two tasks is how it declines:
+          one task is not orchestration, it is a detour.
+        </P>
+
+        <H3>executor_node</H3>
+        <P>
+          Runs the DAG in dependency waves, so independent tasks overlap rather than queue. Each
+          task runs under its own budget and reports its lifecycle through the SSE event sink —
+          that stream is what draws the live diagram in the chat.
+        </P>
+
+        <H3>repair_node</H3>
+        <P>
+          Asks the planner for a different approach to whatever failed, once. Tasks that already
+          succeeded keep their artifacts and are never re-run.
+        </P>
+
+        <H3>aggregator_node</H3>
+        <P>
+          Merges the workers&apos; artifacts into the single reply you read, and it is this node
+          whose LLM call streams — which is why the answer types itself out. It has no tools on
+          purpose: everything that could act has already acted.
+        </P>
+
+        <H3>fallback_node</H3>
+        <P>
+          Invokes the single-agent graph as a subgraph rather than reimplementing it. Memory
+          injection, knowledge-base retrieval and the invented-tool recovery all live there, and a
+          request that skipped planning deserves every one of them.
+        </P>
+
+        <H2>Graph Nodes (the single-agent graph)</H2>
         <H3>agent_node</H3>
         <P>
           Gets the LLM singleton, binds tools, sends SYSTEM_PROMPT + memory_context + full
@@ -577,16 +658,139 @@ ollama pull nomic-embed-text   # Required for RAG embeddings`}</CodeBlock>
             ['agent/graph.py', 'Build LangGraph, manage tool registry'],
             ['agent/nodes.py', 'LLM reasoning node, tool routing'],
             ['agent/state.py', 'NOVAState TypedDict'],
-            ['agent/llm.py', 'LLM singleton (Ollama)'],
+            ['agent/llm.py', 'LLM singleton (Ollama, OpenAI or Anthropic)'],
+            ['agent/orchestrator.py', 'Supervisor graph: plan → execute → repair → aggregate'],
             ['api/main.py', 'FastAPI app factory, CORS, lifespan'],
-            ['api/routes.py', '22 REST endpoints'],
+            ['api/routes.py', 'Chat, streaming, history, settings, memory, documents, scheduler'],
             ['memory/', 'Memory subsystem (facts + episodes)'],
             ['memory/rag/', 'ChromaDB vector store + ingestion'],
             ['tools/', 'Built-in tool implementations'],
             ['scheduler/', 'APScheduler task management'],
             ['nova_mcp/', 'MCP client/server'],
+            ['nova_a2a/', 'Multi-agent orchestration (A2A)'],
           ]}
         />
+      </>
+    ),
+  },
+
+  /* ─── Multi-agent (A2A) ─── */
+  {
+    slug: 'multi-agent',
+    title: 'Multi-agent (A2A)',
+    icon: Network,
+    category: 'Core Concepts',
+    content: (
+      <>
+        <H2>One request, several agents</H2>
+        <P>
+          A request with several independent jobs in it — book a meeting, research the
+          competition, draft a summary — is slow to answer one step at a time. NOVA decomposes it
+          into a task graph, runs the independent parts in parallel across specialised agents, and
+          merges the results into a single answer.
+        </P>
+        <P>
+          Splitting is not always worth it. "What time is it?" needs one agent, not four, so the
+          planner is allowed to decline — and when it does, the turn runs through exactly the
+          single-agent graph NOVA used before. Most turns take that path.
+        </P>
+
+        <H2>The flow</H2>
+        <Mermaid
+          chart={`flowchart TD
+    START(["START"]) --> P["planner<br/>request → task DAG"]
+    P -- "plan" --> E["executor<br/>runs the DAG in dependency waves"]
+    P -- "no plan" --> F["fallback<br/>single-agent graph"]
+    E -- "failures?" --> R["repair<br/>replacement tasks from the planner"]
+    R -- "replacements" --> E
+    R -- "nothing to replace" --> A["aggregator<br/>artifacts → one answer"]
+    E -- "all settled" --> A
+    A --> FIN(["END"])
+    F --> FIN`}
+          caption="executor → repair → executor is the only cycle; MAX_REPAIR_ROUNDS ends it."
+        />
+
+        <H2>The agents</H2>
+        <Table
+          headers={['Agent', 'Skills', 'Needs']}
+          rows={[
+            ['research', 'web.research, knowledge.search', 'nothing'],
+            ['calendar', 'calendar.schedule, calendar.read', 'Google or Microsoft'],
+            ['mail', 'mail.read, mail.search, mail.send', 'Google or Microsoft'],
+            ['docs', 'docs.write, sheets.write, drive.read', 'Google or Microsoft'],
+            ['github', 'github.repos, github.issues, github.activity', 'GitHub'],
+            ['advisor', 'advice.generate, text.summarise', 'nothing (reasoning only, no tools)'],
+          ]}
+        />
+        <P>
+          Each worker sees only its own tools. A worker that binds eight tool schemas instead of
+          thirty-nine has a context window that fits, which is the point of the split. An agent
+          whose account is not connected is never offered to the planner, so it cannot emit a task
+          nobody can carry out.
+        </P>
+
+        <H2>Execution budgets</H2>
+        <P>
+          The failure mode of a research agent is not crashing — it is never deciding it has
+          enough. Every task therefore runs under a budget, and hitting a limit does{' '}
+          <strong className="text-surface-200">not</strong> fail it: the agent stops calling tools
+          and answers with what it already gathered.
+        </P>
+        <Table
+          headers={['Variable', 'Default', 'Bounds']}
+          rows={[
+            ['NOVA_TASK_MAX_STEPS', '6', 'LLM calls in the loop'],
+            ['NOVA_TASK_MAX_TOOL_CALLS', '8', 'tool invocations per task'],
+            ['NOVA_TASK_MAX_SECONDS', '180', 'wall clock, tools included'],
+            ['NOVA_TASK_MAX_REPEATS', '1', 'repeats of the same call before it counts as circling'],
+          ]}
+        />
+        <P>
+          Repeat detection normalises the tool name and arguments, so searching{' '}
+          <code className="text-primary-300">"LangGraph  Release Notes"</code> and then{' '}
+          <code className="text-primary-300">"langgraph release notes"</code> counts as the same
+          search — the shape a loop actually takes. An agent may narrow these for itself but never
+          widen them; the research agent ships with a tighter leash for exactly this reason.
+        </P>
+
+        <H2>When something fails</H2>
+        <UL
+          items={[
+            <>
+              <strong className="text-surface-200">Retry</strong> — the same task again, but only
+              for failures that look transient. A missing connection or an exhausted budget fails
+              identically the second time, so those are never retried.
+            </>,
+            <>
+              <strong className="text-surface-200">Repair</strong> — a different task from the
+              planner, for work that failed because it was the wrong approach. The planner sees the
+              error and may narrow the goal or pick another skill.
+            </>,
+            <>
+              <strong className="text-surface-200">Skip</strong> — a task whose dependency failed
+              never runs. Its input does not exist, and a worker asked to write a document from
+              missing research will invent one.
+            </>,
+          ]}
+        />
+        <P>
+          Stopping a run marks every unfinished task cancelled and says so, rather than leaving
+          agents that never report back.
+        </P>
+
+        <H2>Remote agents</H2>
+        <P>
+          Point NOVA at other agents that publish an Agent Card and their skills join the planner's
+          catalogue — matching tasks are then dispatched over JSON-RPC instead of running
+          in-process:
+        </P>
+        <CodeBlock lang="env">{`NOVA_A2A_PEERS=https://acme.example,https://research.internal`}</CodeBlock>
+        <P>
+          Skills are namespaced per peer so two agents cannot collide, a peer never shadows a
+          built-in skill, and an unreachable peer is simply absent from the catalogue. NOVA is
+          itself a peer: it serves <code className="text-primary-300">POST /a2a</code> and answers
+          as a single agent, so two instances can point at each other.
+        </P>
       </>
     ),
   },
@@ -815,6 +1019,20 @@ def my_new_tool(query: str) -> str:
           created per session.
         </P>
 
+        <Mermaid
+          chart={`flowchart TD
+    TURN["A chat turn finishes"] --> GATE{"4 or more<br/>messages?"}
+    GATE -- "no" --> NOOP["Nothing to learn yet"]
+    GATE -- "yes" --> BG["Fire-and-forget task<br/>asyncio.create_task()"]
+    BG --> FACTS["Extract semantic facts<br/>key = value + confidence"]
+    BG --> EP["Summarise the session<br/>topics + outcome"]
+    FACTS --> DB[("SQLite<br/>data/nova_memory.db")]
+    EP --> DB
+    DB --> BUILD["memory/conversation.py<br/>builds memory_context"]
+    BUILD --> NEXT["Injected into the state<br/>of the next turn"]`}
+          caption="What NOVA keeps from a conversation, and when it comes back."
+        />
+
         <H3>Memory Extraction</H3>
         <P>
           Runs as a fire-and-forget task after every chat response where the conversation has
@@ -828,20 +1046,17 @@ def my_new_tool(query: str) -> str:
         </P>
 
         <H2>RAG Pipeline</H2>
-        <CodeBlock lang="text">{`Upload document
-      |
-  PyMuPDF (PDF) / text loader
-      |
-  RecursiveCharacterTextSplitter
-  (chunk_size=1000, overlap=200)
-      |
-  OllamaEmbeddings (nomic-embed-text)
-      |
-  ChromaDB (persistent at data/chroma/)
-      |
-  rag_search tool -> similarity search
-      |
-  Top chunks returned to agent`}</CodeBlock>
+        <Mermaid
+          chart={`flowchart TD
+    UP["Upload document"] --> LOAD["PyMuPDF for PDFs<br/>text loader otherwise"]
+    LOAD --> SPLIT["RecursiveCharacterTextSplitter<br/>chunk 1000 · overlap 200"]
+    SPLIT --> EMB["OllamaEmbeddings<br/>nomic-embed-text, 768 dims"]
+    EMB --> DB[("ChromaDB<br/>persistent at data/chroma/")]
+    DB --> TOOL["rag_search tool"]
+    TOOL --> SEARCH["Similarity search<br/>with a score threshold"]
+    SEARCH --> AGENT["Top chunks reach the agent"]`}
+          caption="Ingestion and retrieval, entirely offline."
+        />
 
         <H3>Vector Store</H3>
         <P>
@@ -1076,9 +1291,13 @@ make mcp-github`}</CodeBlock>
           <code className="text-primary-300">nova_mcp/builtin.py</code> binds the very same
           functions as LangChain tools — one definition per capability, registered twice.
         </P>
-        <CodeBlock>{`nova_mcp/servers/google.py::TOOLS
-        ├── mcp.tool()       → external MCP clients (stdio / SSE)
-        └── nova_mcp.builtin → LangChain tools for NOVA's own graph`}</CodeBlock>
+        <Mermaid
+          chart={`flowchart LR
+    T["nova_mcp/servers/google.py<br/>TOOLS — one definition per capability"]
+    T -- "@mcp.tool()" --> EXT["External MCP clients<br/>Claude Desktop, IDEs (stdio / SSE)"]
+    T -- "nova_mcp.builtin" --> AG["LangChain tools bound into<br/>NOVA's own graph, in-process"]`}
+          caption="One definition per capability, registered on two surfaces."
+        />
         <P>
           Only services you are signed into contribute tools. This is a hard requirement, not an
           optimisation: tool schemas are large, and two dozen of them fill a local model's context
@@ -1138,15 +1357,24 @@ make mcp-github`}</CodeBlock>
         </P>
 
         <H2>How the flow works</H2>
-        <CodeBlock>{`UI  ──POST /api/v1/connections/{provider}/authorize──►  API
-UI  ◄─────────────── authorize_url ──────────────────  API
-UI  ──opens popup──►  provider consent screen
-                          │  user approves
-                          ▼
-    provider ──redirect──►  GET /api/v1/connections/{provider}/callback
-                                    │  code → access_token + refresh_token
-                                    ▼
-                            connections/store.py  (encrypted SQLite)`}</CodeBlock>
+        <Mermaid
+          chart={`sequenceDiagram
+    participant UI as Browser
+    participant API as NOVA API
+    participant P as Provider
+    participant DB as connections/store.py
+
+    UI->>API: POST /connections/{provider}/authorize
+    API-->>UI: authorize_url (single-use state, 10 min TTL)
+    UI->>P: opens the consent screen in a popup
+    P-->>UI: the user approves
+    P->>API: GET /connections/{provider}/callback?code=…
+    API->>P: exchange the code, server-side
+    P-->>API: access_token + refresh_token
+    API->>DB: store, Fernet-encrypted in SQLite
+    API-->>UI: popup closes; the panel shows the account`}
+          caption="The client secret never leaves the server."
+        />
         <UL
           items={[
             'The client secret never reaches the browser — the code-for-token exchange is server-side.',

@@ -115,10 +115,17 @@ every tool call for no benefit.
 There is one definition per capability: the MCP server registers it for
 external clients, the bridge binds it for the local agent.
 
-```
-nova_mcp/servers/google.py::TOOLS
-        ├── mcp.tool()          → external MCP clients (stdio / SSE)
-        └── nova_mcp.builtin    → LangChain tools for NOVA's own graph
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#052e16','primaryTextColor':'#86efac','primaryBorderColor':'#22c55e','lineColor':'#22c55e','secondaryColor':'#0d0d0d','tertiaryColor':'#0d0d0d','fontFamily':'ui-monospace, SFMono-Regular, monospace','fontSize':'13px'}}}%%
+flowchart LR
+    T["nova_mcp/servers/google.py<br/>TOOLS — one definition per capability"]
+    T -- "@mcp.tool()" --> EXT["External MCP clients<br/>Claude Desktop, IDEs (stdio / SSE)"]
+    T -- "nova_mcp.builtin" --> AG["LangChain tools bound<br/>into NOVA's own graph, in-process"]
+
+    classDef node fill:#052e16,stroke:#22c55e,stroke-width:1px,color:#86efac;
+    classDef leaf fill:#0d0d0d,stroke:#15803d,stroke-width:1px,color:#4ade80;
+    class T node;
+    class EXT,AG leaf;
 ```
 
 Only services the user is **signed into** contribute tools. This is a hard
@@ -129,7 +136,7 @@ and rebuilds the graph on connect, disconnect and credential changes, with no
 restart.
 
 > Ollama's own default context window is 2048 tokens, far too small for this.
-> `NOVA_NUM_CTX` therefore defaults to 8192 — see `agent/llm.py`.
+> `NOVA_NUM_CTX` therefore defaults to 16384 — see `agent/llm.py`.
 
 ### Behaviour when a service is not connected
 

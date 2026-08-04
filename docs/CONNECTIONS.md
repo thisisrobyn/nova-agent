@@ -21,16 +21,24 @@ GitHub can even be registered in a single click.
 
 ## How the flow works
 
-```
-UI  ──POST /api/v1/connections/{provider}/authorize──►  API
-UI  ◄─────────────── authorize_url ──────────────────  API
-UI  ──opens popup──►  provider consent screen
-                          │  user approves
-                          ▼
-    provider ──redirect──►  GET /api/v1/connections/{provider}/callback
-                                    │  code → access_token + refresh_token
-                                    ▼
-                            connections/store.py  (encrypted SQLite)
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#052e16','primaryTextColor':'#86efac','primaryBorderColor':'#22c55e','lineColor':'#22c55e','secondaryColor':'#0d0d0d','tertiaryColor':'#0d0d0d','actorBkg':'#052e16','actorBorder':'#22c55e','actorTextColor':'#86efac','actorLineColor':'#15803d','signalColor':'#4ade80','signalTextColor':'#4ade80','noteBkgColor':'#0d0d0d','noteBorderColor':'#15803d','noteTextColor':'#86efac','fontFamily':'ui-monospace, SFMono-Regular, monospace','fontSize':'13px'}}}%%
+sequenceDiagram
+    participant UI as Browser
+    participant API as NOVA API
+    participant P as Provider
+    participant DB as connections/store.py
+
+    UI->>API: POST /connections/{provider}/authorize
+    API-->>UI: authorize_url (single-use state, 10 min TTL)
+    UI->>P: opens the consent screen in a popup
+    P-->>UI: the user approves
+    P->>API: GET /connections/{provider}/callback?code=…
+    API->>P: exchange the code, server-side
+    P-->>API: access_token + refresh_token
+    API->>DB: store, Fernet-encrypted in SQLite
+    API-->>UI: popup closes; the panel shows the account
+    Note over API,DB: get_access_token() refreshes on expiry,<br/>so callers never deal with it
 ```
 
 Key points:

@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/BrandIcons';
 
 const GITHUB_REPO = 'https://github.com/thisisrober/nova-agent';
+const GITHUB_PROFILE = 'https://github.com/thisisrober';
 const IS_PROD = import.meta.env.PROD;
 
 import {
@@ -38,9 +39,11 @@ import {
   Sparkles,
   Link2,
   Network,
-  Workflow,
   Users,
+  Check,
 } from 'lucide-react';
+
+import { A2AFlow } from '@/components/landing/A2AFlow';
 
 /* ─── Animated Section Wrapper ─── */
 function FadeInSection({
@@ -403,9 +406,9 @@ function ConnectedServicesSection() {
     <section id="connections" className="relative border-t border-surface-700/20 py-32">
       <div className="mx-auto max-w-6xl px-6">
         <FadeInSection className="text-center">
-          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-primary-700/30 bg-primary-900/20 px-3 py-1">
-            <Sparkles className="h-3.5 w-3.5 text-primary-400" />
-            <span className="text-xs font-medium text-primary-300">Latest release</span>
+          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-surface-600/40 bg-surface-900/50 px-3 py-1">
+            <Check className="h-3.5 w-3.5 text-surface-400" />
+            <span className="text-xs font-medium text-surface-300">Shipped in v0.6</span>
           </div>
           <h2 className="text-3xl font-bold text-surface-100 sm:text-4xl">
             Connect your <span className="text-primary-400">own accounts</span>
@@ -413,7 +416,7 @@ function ConnectedServicesSection() {
           <p className="mx-auto mt-4 max-w-2xl text-surface-400">
             Sign in once to Google, Microsoft or GitHub and NOVA works inside your real
             mail, calendar, files and repositories — 28 extra tools, no API keys pasted
-            into a config file.
+            into a config file. These are the hands the orchestrator above reaches for.
           </p>
         </FadeInSection>
 
@@ -507,31 +510,34 @@ function ConnectedServicesSection() {
   );
 }
 
-/* ─── What's next: multi-agent orchestration ───
-   Pays off the acronym in the hero: the O has been the quiet letter so far. */
+/* ─── Multi-agent orchestration (A2A) ───
+   Pays off the acronym in the hero: the O was the quiet letter until now. This
+   is the headline of the release, so it sits ahead of the connectors section
+   and carries the interactive flow diagram. */
 function OrchestrationSection() {
   return (
-    <section id="next" className="relative border-t border-surface-700/20 py-32">
+    <section id="orchestration" className="relative border-t border-surface-700/20 py-32">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute top-1/2 left-1/2 h-[400px] w-[700px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary-500/[0.04] blur-[120px]" />
+        <div className="absolute top-1/3 left-1/2 h-[500px] w-[800px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary-500/[0.06] blur-[120px]" />
       </div>
 
-      <div className="relative mx-auto max-w-5xl px-6">
+      <div className="relative mx-auto max-w-6xl px-6">
         <FadeInSection className="text-center">
-          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-surface-600/40 bg-surface-900/50 px-3 py-1">
-            <Workflow className="h-3.5 w-3.5 text-surface-400" />
-            <span className="text-xs font-medium text-surface-300">Next milestone</span>
+          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-primary-700/30 bg-primary-900/20 px-3 py-1">
+            <Sparkles className="h-3.5 w-3.5 text-primary-400" />
+            <span className="text-xs font-medium text-primary-300">New — latest release</span>
           </div>
           <h2 className="text-3xl font-bold text-surface-100 sm:text-4xl">
             Multi-agent <span className="text-primary-400">orchestration</span>
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-surface-400">
-            One agent doing everything is a bottleneck. The next milestone splits the work
-            across specialised agents — a planner that decomposes the request, workers that own
-            a domain each, and a supervisor that routes between them and merges the results.
+            One agent doing everything is a bottleneck. NOVA now splits the work across
+            specialised agents that talk to each other over <strong className="font-medium text-surface-200">A2A</strong> —
+            a supervisor decomposes the request, workers own a domain each, and the results
+            are merged back into a single answer.
           </p>
           <p className="mx-auto mt-3 max-w-2xl text-sm text-surface-500">
-            It is the letter the name has been saving:{' '}
+            It is the letter the name had been saving:{' '}
             <span className="text-surface-300">
               Neural <span className="text-primary-400">Orchestration</span> &amp; Virtual Agent
             </span>
@@ -539,6 +545,7 @@ function OrchestrationSection() {
           </p>
         </FadeInSection>
 
+        {/* Pillars */}
         <div className="mt-14 grid gap-5 md:grid-cols-3">
           {[
             {
@@ -549,30 +556,44 @@ function OrchestrationSection() {
             {
               icon: Users,
               title: 'Specialised workers',
-              desc: 'Research, code, and connected-service agents, each with a narrow tool belt — and therefore a context window that fits.',
+              desc: 'Research, calendar, documents and advice agents, each with a narrow tool belt — and therefore a context window that fits.',
             },
             {
               icon: Layers,
-              title: 'Shared state',
-              desc: 'Memory, RAG and connections stay in one place, so handing a task between agents does not lose the thread.',
+              title: 'Bounded by design',
+              desc: 'Every task runs under a budget of steps, tools and time. Out of budget answers with what it found, instead of searching forever.',
             },
           ].map(({ icon: Icon, title, desc }, i) => (
             <FadeInSection key={title} delay={0.1 + i * 0.06}>
-              <div className="h-full rounded-xl border border-dashed border-surface-700/40 bg-surface-900/30 p-6">
-                <Icon className="h-5 w-5 text-surface-400" />
-                <h3 className="mt-3 font-semibold text-surface-200">{title}</h3>
+              <div className="h-full rounded-xl border border-surface-700/30 bg-surface-900/40 p-6 backdrop-blur-sm">
+                <Icon className="h-5 w-5 text-primary-400" />
+                <h3 className="mt-3 font-semibold text-surface-100">{title}</h3>
                 <p className="mt-1.5 text-sm leading-relaxed text-surface-400">{desc}</p>
               </div>
             </FadeInSection>
           ))}
         </div>
 
-        <FadeInSection delay={0.3} className="mt-8 text-center">
+        {/* Interactive flow */}
+        <FadeInSection delay={0.15} className="mt-20">
+          <div className="mb-8 text-center">
+            <h3 className="text-xl font-semibold text-surface-100 sm:text-2xl">
+              How a request travels through the <span className="text-primary-400">A2A flow</span>
+            </h3>
+            <p className="mx-auto mt-3 max-w-2xl text-sm text-surface-400">
+              Hover any step to see what happens there — and what it does to one real,
+              deliberately messy prompt.
+            </p>
+          </div>
+          <A2AFlow />
+        </FadeInSection>
+
+        <FadeInSection delay={0.3} className="mt-12 text-center">
           <a
             href="#roadmap"
             className="inline-flex items-center gap-1.5 text-sm text-surface-400 transition-colors hover:text-primary-300"
           >
-            Track it on the roadmap
+            Follow it on the roadmap
             <ArrowRight className="h-3.5 w-3.5" />
           </a>
         </FadeInSection>
@@ -598,8 +619,31 @@ const PRIORITY_COLORS: Record<string, string> = {
   'P3': 'text-surface-400',
 };
 
+/* ─── Status ordering ───
+   The board reads top-down as "closest to shipping first": what is being
+   reviewed, then what is being built, then what is queued — and everything
+   already finished settles at the bottom. */
+const STATUS_ORDER = ['in review', 'review', 'in progress', 'ready', 'backlog', 'done'];
+const DONE_RANK = STATUS_ORDER.indexOf('done');
+
+function statusRank(status: string | null): number {
+  const i = STATUS_ORDER.indexOf((status || '').toLowerCase());
+  // An unrecognised status is still live work, so it sorts above Done.
+  return i === -1 ? DONE_RANK - 0.5 : i;
+}
+
+function isDone(issue: RoadmapIssue): boolean {
+  return (issue.status || '').toLowerCase() === 'done';
+}
+
+/** Stable sort by status; issues keep their board order inside each group. */
+function sortByStatus(issues: RoadmapIssue[]): RoadmapIssue[] {
+  return [...issues].sort((a, b) => statusRank(a.status) - statusRank(b.status));
+}
+
 /* ─── Issue Row ─── */
 function IssueRow({ issue }: { issue: RoadmapIssue }) {
+  const done = isDone(issue);
   const statusClass =
     STATUS_COLORS[(issue.status || '').toLowerCase()] || 'bg-surface-600/50 text-surface-300';
 
@@ -608,29 +652,41 @@ function IssueRow({ issue }: { issue: RoadmapIssue }) {
       href={issue.url || '#'}
       target="_blank"
       rel="noopener noreferrer"
-      className="group flex items-center gap-3 rounded-lg border border-surface-700/20 bg-surface-900/30 px-4 py-3 transition-all hover:border-primary-700/30 hover:bg-surface-800/50"
+      className={`group flex items-center gap-3 rounded-lg border px-4 py-3 transition-all hover:border-primary-700/30 hover:bg-surface-800/50 ${
+        done
+          ? 'border-surface-700/10 bg-surface-900/20 hover:opacity-100 opacity-70'
+          : 'border-surface-700/20 bg-surface-900/30'
+      }`}
     >
       {/* Priority indicator */}
       {issue.priority && (
-        <span className={`shrink-0 text-xs font-bold ${PRIORITY_COLORS[issue.priority] || 'text-surface-400'}`}>
+        <span
+          className={`shrink-0 text-xs font-bold ${
+            done ? 'text-surface-600' : PRIORITY_COLORS[issue.priority] || 'text-surface-400'
+          }`}
+        >
           {issue.priority}
         </span>
       )}
 
       {/* Issue number */}
       {issue.number && (
-        <span className="shrink-0 font-mono text-xs text-surface-500">
+        <span className={`shrink-0 font-mono text-xs ${done ? 'text-surface-600' : 'text-surface-500'}`}>
           #{issue.number}
         </span>
       )}
 
-      {/* Title */}
-      <span className="min-w-0 flex-1 truncate text-sm text-surface-200 group-hover:text-primary-300 transition-colors">
+      {/* Title — finished work reads as settled rather than current */}
+      <span
+        className={`min-w-0 flex-1 truncate text-sm transition-colors group-hover:text-primary-300 ${
+          done ? 'text-surface-500' : 'text-surface-200'
+        }`}
+      >
         {issue.title}
       </span>
 
       {/* Labels */}
-      <div className="hidden items-center gap-1.5 sm:flex">
+      <div className={`hidden items-center gap-1.5 sm:flex ${done ? 'opacity-50' : ''}`}>
         {issue.labels.map((label) => (
           <span
             key={label.name}
@@ -648,8 +704,13 @@ function IssueRow({ issue }: { issue: RoadmapIssue }) {
 
       {/* Status badge */}
       {issue.status && (
-        <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-medium ${statusClass}`}>
-          {issue.status}
+        <span
+          className={`flex shrink-0 items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-medium ${
+            done ? 'bg-surface-800/60 text-surface-500' : statusClass
+          }`}
+        >
+          {done && <Check className="h-2.5 w-2.5" />}
+          {done ? 'Completed' : issue.status}
         </span>
       )}
 
@@ -736,6 +797,8 @@ function IterationPanel({ iteration, now }: { iteration: RoadmapIteration; now: 
   const phase = iterationPhase(iteration, now);
   const range = formatRange(iteration);
   const progress = phase === 'active' ? iterationProgress(iteration, now) : null;
+  const items = useMemo(() => sortByStatus(iteration.items), [iteration.items]);
+  const doneCount = items.filter(isDone).length;
 
   return (
     <div className="space-y-2">
@@ -743,7 +806,10 @@ function IterationPanel({ iteration, now }: { iteration: RoadmapIteration; now: 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
           <span className="text-sm font-medium text-surface-300">
-            {iteration.items.length} issue{iteration.items.length !== 1 ? 's' : ''}
+            {items.length} issue{items.length !== 1 ? 's' : ''}
+            {doneCount > 0 && (
+              <span className="ml-2 text-surface-500">{doneCount} completed</span>
+            )}
           </span>
           {phase !== 'unknown' && (
             <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${PHASE_CLASS[phase]}`}>
@@ -773,13 +839,13 @@ function IterationPanel({ iteration, now }: { iteration: RoadmapIteration; now: 
         </div>
       )}
 
-      {/* Issues */}
-      {iteration.items.length === 0 ? (
+      {/* Issues — live work first, completed work settled at the bottom */}
+      {items.length === 0 ? (
         <div className="rounded-lg border border-dashed border-surface-700/30 py-8 text-center text-sm text-surface-500">
           No issues assigned to this iteration yet
         </div>
       ) : (
-        iteration.items.map((issue, i) => <IssueRow key={i} issue={issue} />)
+        items.map((issue, i) => <IssueRow key={i} issue={issue} />)
       )}
     </div>
   );
@@ -947,7 +1013,7 @@ function RoadmapSection() {
                         <div className="mb-4 text-sm font-medium text-surface-300">
                           {data.backlog.length} item{data.backlog.length !== 1 ? 's' : ''} not assigned to an iteration
                         </div>
-                        {data.backlog.map((issue, i) => (
+                        {sortByStatus(data.backlog).map((issue, i) => (
                           <IssueRow key={i} issue={issue} />
                         ))}
                       </div>
@@ -985,15 +1051,18 @@ export function LandingPage() {
               NOVA
             </span>
           </div>
-          <div className="hidden items-center gap-8 md:flex">
+          <div className="hidden items-center gap-6 lg:flex">
             <a href="#features" className="text-sm text-surface-300 transition-colors hover:text-primary-400">
               Features
             </a>
-            <a href="#connections" className="group inline-flex items-center gap-1.5 text-sm text-surface-300 transition-colors hover:text-primary-400">
-              Connections
+            <a href="#orchestration" className="group inline-flex items-center gap-1.5 text-sm text-surface-300 transition-colors hover:text-primary-400">
+              Orchestration
               <span className="rounded-full bg-primary-500/15 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-primary-300">
                 New
               </span>
+            </a>
+            <a href="#connections" className="text-sm text-surface-300 transition-colors hover:text-primary-400">
+              Connections
             </a>
             <a href="#architecture" className="text-sm text-surface-300 transition-colors hover:text-primary-400">
               Architecture
@@ -1011,10 +1080,14 @@ export function LandingPage() {
             </a>
           </div>
           <div className="flex items-center gap-3">
+            {/* The wordmark's GitHub icon points at the author; the button next
+                to it is the one that goes to the repository. */}
             <a
-              href="https://github.com/thisisrober/nova-agent"
+              href={GITHUB_PROFILE}
               target="_blank"
               rel="noopener noreferrer"
+              title="thisisrober on GitHub"
+              aria-label="thisisrober on GitHub"
               className="rounded-lg p-2 text-surface-400 transition-colors hover:bg-surface-800 hover:text-surface-200"
             >
               <Github className="h-5 w-5" />
@@ -1071,8 +1144,9 @@ export function LandingPage() {
             className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-surface-300 sm:text-xl"
           >
             An AI assistant that reasons, searches the web, executes code, and remembers your
-            conversations — and now works directly in your Google, Microsoft and GitHub accounts.
-            Runs on a local Ollama model, or on OpenAI or Anthropic if you prefer.
+            conversations — and now splits a request across specialised agents that coordinate
+            over A2A, inside your own Google, Microsoft and GitHub accounts. Runs on a local
+            Ollama model, or on OpenAI or Anthropic if you prefer.
           </motion.p>
 
           {/* CTAs */}
@@ -1200,7 +1274,10 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* ─── Connected Services Section ─── */}
+      {/* ─── Multi-agent orchestration (A2A) — the headline of this release ─── */}
+      <OrchestrationSection />
+
+      {/* ─── Connected Services — the hands the orchestrator reaches for ─── */}
       <ConnectedServicesSection />
 
       {/* ─── Architecture Section ─── */}
@@ -1456,9 +1533,6 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* ─── What's next: multi-agent orchestration ─── */}
-      <OrchestrationSection />
-
       {/* ─── Project Board / Roadmap Section ─── */}
       <RoadmapSection />
 
@@ -1485,15 +1559,6 @@ export function LandingPage() {
                 {IS_PROD ? 'Get it on GitHub' : 'Launch NOVA'}
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
               </button>
-              <a
-                href="https://github.com/thisisrober/nova-agent"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-xl border border-surface-600 px-8 py-3.5 text-sm text-surface-300 transition-all hover:border-surface-500 hover:text-surface-200"
-              >
-                <Github className="h-4 w-4" />
-                View on GitHub
-              </a>
             </div>
           </FadeInSection>
         </div>

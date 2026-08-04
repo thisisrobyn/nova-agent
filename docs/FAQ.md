@@ -122,8 +122,18 @@ Yes, from the UI, or via `POST /api/v1/chat/stop/{session_id}`.
 ### What does NOVA stand for?
 
 **N**eural **O**rchestration & **V**irtual **A**gent. The orchestration half is
-deliberate: the next milestone is multi-agent orchestration — a supervisor
-routing work to specialised agents rather than one agent juggling every tool.
+literal: a supervisor graph splits a request across specialised agents rather
+than making one agent juggle every tool. It ships — see
+[MULTI_AGENT.md](MULTI_AGENT.md).
+
+### Does every message go through the multi-agent orchestrator?
+
+Every turn enters it, but most come straight back out. Splitting "what time is
+it?" across four agents is pure overhead, so the planner is allowed to decline,
+and a plan of fewer than two tasks counts as declining — the turn then runs on
+the single-agent graph, with the memory and knowledge-base context the workers
+deliberately do not carry. When it does split, the chat shows the task graph
+live: which agent is working, which tool it is calling, what each one cost.
 
 ### Where do I report a bug or follow development?
 

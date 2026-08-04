@@ -19,6 +19,27 @@ Each fact is stored with a confidence score and the source session ID.
 
 Summaries of conversations including key topics and message counts. One episode is created per session.
 
+### The memory loop
+
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#052e16','primaryTextColor':'#86efac','primaryBorderColor':'#22c55e','lineColor':'#22c55e','secondaryColor':'#0d0d0d','tertiaryColor':'#0d0d0d','fontFamily':'ui-monospace, SFMono-Regular, monospace','fontSize':'13px'}}}%%
+flowchart TD
+    TURN["A chat turn finishes"] --> GATE{"4 or more<br/>messages?"}
+    GATE -- "no" --> NOOP["Nothing to learn yet"]
+    GATE -- "yes" --> BG["Fire-and-forget task<br/>asyncio.create_task()"]
+    BG --> FACTS["Extract semantic facts<br/>key = value + confidence"]
+    BG --> EP["Summarise the session<br/>topics + outcome"]
+    FACTS --> DB[("SQLite<br/>data/nova_memory.db")]
+    EP --> DB
+    DB --> BUILD["memory/conversation.py<br/>builds memory_context"]
+    BUILD --> NEXT["Injected into the state<br/>of the next turn"]
+
+    classDef node fill:#052e16,stroke:#22c55e,stroke-width:1px,color:#86efac;
+    classDef store fill:#0d0d0d,stroke:#15803d,stroke-width:1px,color:#4ade80;
+    class TURN,BG,FACTS,EP,BUILD,NEXT,NOOP node;
+    class DB,GATE store;
+```
+
 ### Memory Extraction
 
 Memory extraction runs as a fire-and-forget task (`asyncio.create_task`) after every chat response where the conversation has 4 or more messages. The LLM analyzes the conversation and:

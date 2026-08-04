@@ -16,9 +16,11 @@ from langchain_core.callbacks import AsyncCallbackHandler
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from agent.graph import compiled_graph, run_agent_once
+from agent.orchestrator import get_orchestrator_graph
 from agent.llm import get_settings, list_ollama_models, reinitialize_llm
 from api.github_roadmap import RoadmapError, fetch_roadmap, get_roadmap_config
 from api.schemas import (
+    A2ATaskState,
     ChatMessage,
     ChatRequest,
     ChatResponse,
@@ -50,6 +52,7 @@ from api.schemas import (
     SessionSummary,
     SettingsResponse,
     SettingsUpdate,
+    SystemMetricsResponse,
     TaskExecutionListResponse,
     TaskExecutionResponse,
     TitleRequest,
@@ -70,13 +73,19 @@ _SESSIONS_DIR = Path(__file__).resolve().parent.parent / "data" / "sessions"
 #: LangChain round-trips that dict untouched, so it survives graph execution.
 _STATS_KEY = "nova_stats"
 
+#: Key under which the orchestrated run that produced a message is stamped onto
+#: it. The session state only ever holds the *latest* turn's plan, so without
+#: this every earlier reply loses its diagram the moment the page is reloaded.
+_RUN_KEY = "nova_run"
+
 
 def _stamp_last_ai_message(state: Dict[str, Any], elapsed: float | None) -> None:
-    """Attach this turn's token usage and duration to its final message.
+    """Attach this turn's stats and orchestration run to its final message.
 
-    The state only remembers the *latest* turn's ``token_usage``; unless it is
-    stamped onto the message itself before persisting, Σ and the response time
-    vanish from every message as soon as a session is reloaded from disk.
+    The state only remembers the *latest* turn's ``token_usage``, ``plan`` and
+    ``results``; unless they are stamped onto the message itself before
+    persisting, Σ, the response time and the whole agent diagram vanish from
+    every earlier message as soon as a session is reloaded from disk.
     """
     for msg in reversed(state.get("messages", [])):
         if isinstance(msg, AIMessage) and _content_to_text(msg.content):
@@ -87,6 +96,13 @@ def _stamp_last_ai_message(state: Dict[str, Any], elapsed: float | None) -> None
                 stats["elapsed_seconds"] = elapsed
             if stats:
                 msg.additional_kwargs[_STATS_KEY] = stats
+
+            if state.get("plan"):
+                msg.additional_kwargs[_RUN_KEY] = {
+                    "run_id": state.get("run_id", ""),
+                    "plan": _serialise_task_like(state.get("plan") or []),
+                    "results": _serialise_task_like(state.get("results") or []),
+                }
             return
 
 
@@ -122,6 +138,9 @@ def _serialize_message(msg) -> dict | None:
         stats = (msg.additional_kwargs or {}).get(_STATS_KEY)
         if stats:
             data["stats"] = stats
+        run = (msg.additional_kwargs or {}).get(_RUN_KEY)
+        if run:
+            data["run"] = run
         return data
     if isinstance(msg, ToolMessage):
         return {
@@ -146,6 +165,8 @@ def _deserialize_message(data: dict):
             msg.tool_calls = data["tool_calls"]
         if data.get("stats"):
             msg.additional_kwargs[_STATS_KEY] = data["stats"]
+        if data.get("run"):
+            msg.additional_kwargs[_RUN_KEY] = data["run"]
         return msg
     if t == "tool":
         return ToolMessage(
@@ -156,6 +177,59 @@ def _deserialize_message(data: dict):
     if t == "system":
         return SystemMessage(content=data["content"])
     return None
+
+
+def _build_task_states(plan: list, results: list) -> list:
+    """Merge a plan with its execution results into ``A2ATaskState`` entries.
+
+    ``plan`` and ``results`` come from ``OrchestratorState``, which may hold
+    either ``Task`` model instances (fresh from a run) or plain dicts (loaded
+    back from a persisted session).
+    """
+    def as_dict(item: Any) -> dict:
+        return item.model_dump(mode="json") if hasattr(item, "model_dump") else dict(item)
+
+    outcomes = {}
+    for item in results:
+        data = as_dict(item)
+        if data.get("id"):
+            outcomes[data["id"]] = data
+
+    states = []
+    for item in plan:
+        data = as_dict(item)
+        outcome = outcomes.get(data.get("id"), {})
+        artifact = outcome.get("artifact")
+        states.append(A2ATaskState(
+            id=data.get("id", ""),
+            skill=data.get("skill", ""),
+            goal=data.get("goal", ""),
+            depends_on=data.get("depends_on", []),
+            agent=outcome.get("assigned_to") or data.get("agent"),
+            state=outcome.get("state", "pending"),
+            artifact=artifact.get("text") if isinstance(artifact, dict) else artifact,
+            error=outcome.get("error"),
+            elapsed_seconds=outcome.get("elapsed_seconds"),
+            tools=[
+                ToolInfo(name=call.get("name", "unknown"), result=call.get("result", ""))
+                for call in outcome.get("tools", [])
+                if isinstance(call, dict)
+            ],
+            token_usage=outcome.get("token_usage"),
+            budget_note=outcome.get("budget_note"),
+        ))
+    return states
+
+
+def _serialise_task_like(value: Any) -> Any:
+    """Convert LangGraph task instances into JSON-safe data."""
+    if hasattr(value, "model_dump"):
+        return value.model_dump(mode="json")
+    if isinstance(value, list):
+        return [_serialise_task_like(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _serialise_task_like(item) for key, item in value.items()}
+    return value
 
 
 def _persist_session(session_id: str, session: Dict[str, Any]) -> None:
@@ -174,6 +248,7 @@ def _persist_session(session_id: str, session: Dict[str, Any]) -> None:
                 pass
 
         msgs = [_serialize_message(m) for m in session.get("messages", [])]
+        ignore_keys = {"active_task", "response_buffer", "is_generating"}
         payload = {
             "messages": [m for m in msgs if m is not None],
             "memory_context": session.get("memory_context", ""),
@@ -184,6 +259,10 @@ def _persist_session(session_id: str, session: Dict[str, Any]) -> None:
             "created_at": created_at,
             "updated_at": time.time(),
         }
+        for key in ("plan", "results"):
+            if key in session and session.get(key):
+                payload[f"orchestrator_{key}"] = _serialise_task_like(session[key])
+        payload = {k: v for k, v in payload.items() if k not in ignore_keys}
         path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     except Exception:
         logger.exception("Failed to persist session %s", session_id)
@@ -240,17 +319,20 @@ def _load_session_from_disk(session_id: str) -> Dict[str, Any] | None:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         messages = [_deserialize_message(m) for m in data.get("messages", [])]
-        return {
+        result = {
             "messages": [m for m in messages if m is not None],
             "memory_context": data.get("memory_context", ""),
             "tool_results": data.get("tool_results", []),
             "iteration_count": data.get("iteration_count", 0),
             "total_tokens": data.get("total_tokens", 0),
             "token_usage": data.get("token_usage"),
+            "plan": data.get("orchestrator_plan", []),
+            "results": data.get("orchestrator_results", []),
             "active_task": None,
             "response_buffer": None,
             "is_generating": False,
         }
+        return result
     except Exception:
         logger.exception("Failed to load session %s from disk", session_id)
         return None
@@ -353,6 +435,8 @@ def _get_session(session_id: str) -> Dict[str, Any]:
                 "iteration_count": 0,
                 "total_tokens": 0,
                 "token_usage": None,
+                "plan": [],
+                "results": [],
                 "active_task": None,
                 "response_buffer": None,
                 "is_generating": False,
@@ -398,7 +482,12 @@ async def chat(
         state = dict(_get_session(request.session_id))
         state["messages"] = _sanitize_history(state.get("messages", []))
         started = time.monotonic()
-        updated_state = await run_agent_once(request.message, state)
+        updated_state = await get_orchestrator_graph().ainvoke(
+            {
+                **state,
+                "messages": _sanitize_history(state.get("messages", [])) + [HumanMessage(content=request.message)],
+            }
+        )
         _stamp_last_ai_message(updated_state, round(time.monotonic() - started, 1))
         _sessions[request.session_id] = updated_state
         _persist_session(request.session_id, updated_state)
@@ -412,6 +501,65 @@ async def chat(
     except Exception as e:
         logger.exception("Chat endpoint error")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _readable_provider_error(exc: Exception) -> str:
+    """Turn a provider SDK exception into something the user can act on.
+
+    An expired API key surfaced as a raw ``Error code: 401 - {'type': 'error',
+    …}`` dump, which says nothing about what to do and looks like a bug in
+    NOVA rather than a setting the user can fix in two clicks.
+    """
+    from agent.llm import get_settings
+
+    text = str(exc)
+    provider = str(get_settings().get("provider", "the provider")).title()
+
+    if "401" in text or "authentication_error" in text or "invalid_api_key" in text:
+        return (
+            f"{provider} rejected the API key. Open settings and enter a valid "
+            f"key, or switch the provider back to Ollama to run locally."
+        )
+    if "429" in text or "rate_limit" in text:
+        return f"{provider} is rate-limiting this key. Wait a moment and try again."
+    if "insufficient_quota" in text or "credit balance" in text.lower():
+        return f"This {provider} key has no credit left. Top it up or switch provider in settings."
+    if "404" in text and "model" in text.lower():
+        return (
+            f"{provider} does not recognise the selected model. Pick another one "
+            "in settings."
+        )
+    return text
+
+
+async def run_turn_for_a2a(session_id: str, message: str) -> str:
+    """Run one full turn on behalf of a remote agent, and return the text.
+
+    The same orchestrator the chat endpoint uses, with the same session
+    persistence — a peer holding a multi-turn conversation gets the memory a
+    human user would. It bypasses the HTTP chat schema rather than calling that
+    endpoint, because what A2A needs back is the answer, not NOVA's own
+    UI-shaped response envelope.
+    """
+    state = dict(_get_session(session_id))
+    started = time.monotonic()
+    updated_state = await get_orchestrator_graph().ainvoke(
+        {
+            **state,
+            "messages": _sanitize_history(state.get("messages", []))
+            + [HumanMessage(content=message)],
+        }
+    )
+    _stamp_last_ai_message(updated_state, round(time.monotonic() - started, 1))
+    _sessions[session_id] = updated_state
+    _persist_session(session_id, updated_state)
+
+    for msg in reversed(updated_state.get("messages", [])):
+        if isinstance(msg, AIMessage):
+            text = _content_to_text(msg.content)
+            if text:
+                return text
+    return "FAILED: NOVA produced no answer."
 
 
 @router.get("/chat/history", response_model=SessionListResponse)
@@ -446,12 +594,17 @@ async def get_history(session_id: str) -> HistoryResponse:
                 # Pure tool-call / reasoning turn: nothing for the user to read.
                 continue
             stats = (msg.additional_kwargs or {}).get(_STATS_KEY, {})
+            run = (msg.additional_kwargs or {}).get(_RUN_KEY) or {}
             messages.append(ChatMessage(
                 role="assistant",
                 content=content,
                 tools_used=pending_tools,
                 token_usage=stats.get("token_usage"),
                 elapsed_seconds=stats.get("elapsed_seconds"),
+                # Every orchestrated reply carries its own run, so scrolling
+                # back shows each turn's diagram rather than only the last.
+                plan=_build_task_states(run.get("plan") or [], run.get("results") or []),
+                run_id=run.get("run_id") or None,
             ))
             pending_tools = []
         elif isinstance(msg, ToolMessage):
@@ -460,11 +613,23 @@ async def get_history(session_id: str) -> HistoryResponse:
             pending_tools.append(info)
             messages.append(ChatMessage(role="tool", content=text, tools_used=[info]))
 
+    # Sessions written before runs were stamped per message have their plan
+    # only in the session state. Attaching it to the last reply keeps those
+    # conversations showing their diagram instead of losing it on upgrade.
+    last_assistant = next(
+        (m for m in reversed(messages) if m.role == "assistant"), None
+    )
+    if last_assistant is not None and not last_assistant.plan and state.get("plan"):
+        last_assistant.plan = _build_task_states(
+            state.get("plan") or [], state.get("results") or []
+        )
+
     return HistoryResponse(
         session_id=session_id,
         messages=messages,
         total_tokens=state.get("total_tokens", 0),
         iteration_count=state.get("iteration_count", 0),
+        is_generating=bool(state.get("is_generating", False)),
     )
 
 
@@ -540,14 +705,28 @@ async def _run_langgraph_task(
     token_handler = _TokenStreamHandler(buffer)
 
     try:
-        async for state in compiled_graph.astream(
+        graph = get_orchestrator_graph()
+        async for state in graph.astream(
             input_state,
-            config={"callbacks": [token_handler]},
+            # No top-level `callbacks` here: LangChain propagates that entry
+            # to every nested LLM call in this run via an ambient contextvar,
+            # which would stream the planner's raw structured-output JSON and
+            # each worker's answer straight into the chat. The token handler
+            # travels through `configurable` instead, so only the node that
+            # produces the user-facing reply (aggregator or fallback) can opt
+            # back into streaming — see `orchestrator._llm_streaming_config`.
+            config={"configurable": {"event_sink": buffer, "token_handler": token_handler}},
             stream_mode="values",
         ):
             final_state = state
 
-            # Detect new tool-related messages for tool_start / tool_end
+            # Detect new tool-related messages for tool_start / tool_end.
+            # The orchestrator emits task/tool lifecycle events through its event
+            # sink, so the legacy message scan is only for the fallback single-agent
+            # path and avoids duplicate chips during orchestration.
+            if state.get("plan"):
+                continue
+
             msgs = state.get("messages", [])
             new_msgs = msgs[seen_message_count:]
             seen_message_count = len(msgs)
@@ -600,7 +779,7 @@ async def _run_langgraph_task(
         })
     except Exception as exc:
         logger.exception("Streaming error in background task")
-        await buffer.put({"type": "error", "message": str(exc)})
+        await buffer.put({"type": "error", "message": _readable_provider_error(exc)})
     finally:
         elapsed = round(time.monotonic() - start_time, 1)
 
@@ -679,6 +858,8 @@ async def chat_stream(request: ChatRequest, user=Depends(_optional_user)):
     input_state["messages"] = _sanitize_history(session.get("messages", [])) + [
         HumanMessage(content=request.message)
     ]
+    input_state["plan"] = session.get("plan", [])
+    input_state["results"] = session.get("results", [])
 
     # Create the response buffer and background task
     buffer: asyncio.Queue = asyncio.Queue()
@@ -849,6 +1030,22 @@ async def post_provider_test(body: ProviderTestRequest) -> ProviderTestResponse:
         models=[ProviderModel(**m) for m in result["models"]],
         error=result.get("error"),
     )
+
+
+# ── Host resource metrics ──────────────────────────────────────────
+
+@router.get("/system/metrics", response_model=SystemMetricsResponse)
+async def get_system_metrics() -> SystemMetricsResponse:
+    """Report CPU / RAM / GPU usage of the machine running the API.
+
+    Polled every couple of seconds by the monitor panel, so it never blocks:
+    counters are read differentially and the GPU probe is cached. A host with
+    no readable counters answers ``available=false`` rather than an error, so
+    the panel can explain itself instead of showing a broken chart.
+    """
+    from api.system_metrics import collect_metrics
+
+    return SystemMetricsResponse(**await collect_metrics())
 
 
 # ── Memory extraction helper ───────────────────────────────────────

@@ -125,6 +125,34 @@ async def test_calendar_events_can_be_updated_and_deleted(connections_db):
     assert "microsoft_update_calendar_event" in names
 
 
+@pytest.mark.parametrize(
+    "action, title, event_id, url",
+    [
+        ("created", "Estudiar LangGraph", "41h5ij2fo", "https://cal.example/e/1"),
+        ("updated", "Review", "abc123", "https://outlook.example/e/2"),
+    ],
+)
+def test_event_result_leads_with_a_clickable_link(action, title, event_id, url):
+    """A confirmation must reach the event in one click, not quote an id."""
+    from nova_mcp.servers._common import event_result
+
+    result = event_result(action, title, event_id, url)
+
+    assert f"[{title}]({url})" in result
+    # The id stays available for update/delete, but flagged as internal.
+    assert event_id in result
+    assert "Never print the raw id" in result
+
+
+def test_event_result_without_a_link_still_confirms():
+    from nova_mcp.servers._common import event_result
+
+    result = event_result("created", "", "xyz", "")
+
+    assert "the event" in result
+    assert "xyz" in result
+
+
 # ── Not-connected behaviour ──────────────────────────────────
 
 @pytest.mark.asyncio

@@ -10,6 +10,67 @@ export interface TokenUsage {
   [key: string]: unknown;
 }
 
+/**
+ * Lifecycle of one plan task. Mirrors `nova_a2a.models.TaskState`, minus the
+ * states that never reach the UI — `canceled` does, whenever a run is stopped
+ * mid-plan, and omitting it left the diagram rendering an undefined style.
+ */
+export type AgentTaskState =
+  | 'pending'
+  | 'working'
+  | 'completed'
+  | 'failed'
+  | 'canceled'
+  | 'skipped';
+
+/** A plan task merged with its execution outcome, as persisted with a message. */
+export interface AgentTaskStateSnapshot {
+  id: string;
+  skill: string;
+  goal: string;
+  depends_on: string[];
+  agent?: string | null;
+  state: AgentTaskState;
+  artifact?: string | null;
+  error?: string | null;
+  elapsed_seconds?: number | null;
+  /** Tools this agent called — what the activity log replays after a reload. */
+  tools?: ToolInfo[];
+  /** This agent's share of the turn's token cost. */
+  token_usage?: TokenUsage | null;
+  /** Why an execution budget cut this agent short, when one did. */
+  budget_note?: string | null;
+}
+
+/**
+ * Live runtime state of one plan task, as the diagram renders it.
+ *
+ * The single definition on purpose: this shape is written by the SSE handlers,
+ * stored per run, snapshotted onto a message and rehydrated from history, and
+ * a field added to only three of those four places is a silent data loss.
+ */
+export interface AgentTaskRuntimeState {
+  state: AgentTaskState;
+  agent?: string;
+  skill?: string;
+  goal?: string;
+  artifact?: string;
+  error?: string;
+  elapsed_seconds?: number;
+  /** Tools this task's agent has called so far, in order. */
+  tools?: { name: string; result?: string }[];
+  /** This agent's share of the turn's token cost. */
+  token_usage?: TokenUsage;
+  /** Set when an execution budget stopped this agent early. */
+  budget_note?: string;
+  /** Attempt currently running, when this task had to be retried. */
+  attempt?: number;
+  /** Attempts the retry policy allows in total. */
+  attempts_allowed?: number;
+  /** Id of the failed task this one was planned to replace. */
+  repairs?: string;
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'tool';
   content: string;
@@ -17,6 +78,10 @@ export interface ChatMessage {
   token_usage: TokenUsage | null;
   /** Wall-clock seconds the assistant took to produce this message. */
   elapsed_seconds?: number | null;
+  /** The orchestrator plan that produced this reply, if it was orchestrated. */
+  plan?: AgentTaskStateSnapshot[];
+  /** Identifier of the orchestrated turn that produced this reply. */
+  run_id?: string | null;
 }
 
 export interface ChatResponse {
@@ -32,6 +97,8 @@ export interface HistoryResponse {
   messages: ChatMessage[];
   total_tokens: number;
   iteration_count: number;
+  /** Whether a background generation is still running server-side for this session. */
+  is_generating?: boolean;
 }
 
 export interface SessionSummary {
@@ -107,20 +174,73 @@ export interface PullProgress {
 
 /* ── Stream events ────────────────────────────────────────── */
 
+export interface AgentPlanTask {
+  id: string;
+  skill: string;
+  goal: string;
+  depends_on: string[];
+  agent?: string | null;
+}
+
+export interface StreamPlanEvent {
+  type: 'plan';
+  tasks: AgentPlanTask[];
+}
+
 export interface StreamTokenEvent {
   type: 'token';
   content: string;
 }
 
+export interface StreamTaskStartEvent {
+  type: 'task_start';
+  id: string;
+  agent: string;
+  skill: string;
+  goal: string;
+}
+
+export interface StreamTaskEndEvent {
+  type: 'task_end';
+  id: string;
+  agent: string;
+  state: 'completed' | 'failed' | 'canceled' | 'skipped';
+  artifact?: string;
+  error?: string;
+  elapsed_seconds?: number;
+  token_usage?: TokenUsage;
+  /** Why an execution budget stopped this agent, when one did. */
+  note?: string;
+}
+
+/** A transient failure being attempted again, before the retry runs. */
+export interface StreamTaskRetryEvent {
+  type: 'task_retry';
+  id: string;
+  agent: string;
+  attempt: number;
+  of: number;
+  error?: string;
+}
+
+/** The planner replaced failed tasks with a different approach. */
+export interface StreamReplanEvent {
+  type: 'replan';
+  round: number;
+  tasks: (AgentPlanTask & { repairs?: string | null })[];
+}
+
 export interface StreamToolStartEvent {
   type: 'tool_start';
   name: string;
+  task_id?: string;
 }
 
 export interface StreamToolEndEvent {
   type: 'tool_end';
   name: string;
   result: string;
+  task_id?: string;
 }
 
 export interface StreamDoneEvent {
@@ -151,7 +271,12 @@ export interface StreamStatusEvent {
 }
 
 export type StreamEvent =
+  | StreamPlanEvent
   | StreamTokenEvent
+  | StreamTaskStartEvent
+  | StreamTaskEndEvent
+  | StreamTaskRetryEvent
+  | StreamReplanEvent
   | StreamToolStartEvent
   | StreamToolEndEvent
   | StreamDoneEvent
@@ -302,4 +427,93 @@ export interface GitHubManifestResponse {
   /** JSON-encoded manifest, submitted as the `manifest` form field. */
   manifest: string;
   state: string;
+}
+
+/* ── Host resource metrics ────────────────────────────────── */
+
+export interface CpuMetrics {
+  percent: number;
+  per_core: number[];
+  cores_logical: number | null;
+  cores_physical: number | null;
+  frequency_mhz: number | null;
+  /** Only Linux-like hosts expose this; Windows reports nothing readable. */
+  temperature_celsius: number | null;
+}
+
+export interface MemoryMetrics {
+  total_bytes: number;
+  used_bytes: number;
+  available_bytes: number;
+  percent: number;
+}
+
+export interface SwapMetrics {
+  total_bytes: number;
+  used_bytes: number;
+  percent: number;
+}
+
+/** Counters are optional: a driver reports `[N/A]` for what a card lacks. */
+export interface GpuMetrics {
+  index: number;
+  name: string;
+  utilization_percent: number | null;
+  memory_used_bytes: number | null;
+  memory_total_bytes: number | null;
+  memory_percent: number | null;
+  temperature_celsius: number | null;
+  power_watts: number | null;
+}
+
+export interface ProcessMetrics {
+  pid: number;
+  memory_bytes: number;
+  /** Already divided by the core count, so it shares the 0–100 axis. */
+  cpu_percent: number;
+  threads: number;
+}
+
+export interface DiskMetrics {
+  device: string;
+  mountpoint: string;
+  fstype: string;
+  total_bytes: number;
+  used_bytes: number;
+  free_bytes: number;
+  percent: number;
+  /** The volume holding the local model weights — the one that stops NOVA. */
+  holds_models: boolean;
+}
+
+export interface DiskIoMetrics {
+  read_bytes_per_sec: number;
+  write_bytes_per_sec: number;
+}
+
+export interface NetworkMetrics {
+  sent_bytes_per_sec: number;
+  received_bytes_per_sec: number;
+}
+
+/** One sample of the API host's resources. */
+export interface SystemMetrics {
+  /** Epoch seconds — the x value this sample is plotted at. */
+  timestamp: number;
+  available: boolean;
+  error: string | null;
+  platform: string;
+  hostname: string;
+  uptime_seconds: number | null;
+  cpu: CpuMetrics | null;
+  memory: MemoryMetrics | null;
+  swap: SwapMetrics | null;
+  gpus: GpuMetrics[];
+  gpu_backend: string | null;
+  disks: DiskMetrics[];
+  /** Null until a second poll gives the rates something to diff against. */
+  disk_io: DiskIoMetrics | null;
+  network: NetworkMetrics | null;
+  models_path: string | null;
+  process: ProcessMetrics | null;
 }

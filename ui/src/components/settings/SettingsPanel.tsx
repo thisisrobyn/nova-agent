@@ -159,12 +159,28 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
     if (!apiKey.trim() && !keyIsStored) return;
     setTesting(true); setTestError(''); setProviderModels([]);
     try {
-      const res = await testProvider(provider, apiKey.trim() || undefined);
-      if (res.valid) {
-        setProviderModels(res.models);
-        if (res.models.length === 0) setTestError(t('set.noModels'));
-      } else {
+      const typed = apiKey.trim();
+      const res = await testProvider(provider, typed || undefined);
+      if (!res.valid) {
         setTestError(res.error || t('set.invalidKey'));
+        return;
+      }
+
+      setProviderModels(res.models);
+      if (res.models.length === 0) setTestError(t('set.noModels'));
+
+      // Store the key the moment it validates. It used to be persisted only
+      // when a model was afterwards picked from the list, so replacing an
+      // expired key without also re-picking the (already active) model left
+      // the old one in place — the panel kept showing the previous key and
+      // every request kept failing with a 401.
+      if (typed) {
+        const s = await updateSettings(
+          provider === 'openai' ? { openai_api_key: typed } : { anthropic_api_key: typed },
+        );
+        setSettings(s);
+        setApiKey('');
+        setMsg(t('set.keyStored'));
       }
     } catch {
       setTestError(t('set.testError'));

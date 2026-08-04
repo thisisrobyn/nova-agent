@@ -2,7 +2,30 @@ import { useState, useCallback, useRef, useEffect, useMemo, useSyncExternalStore
 import { getHistory, clearHistory } from '@/lib/api';
 import * as chatRuns from '@/lib/chatRuns';
 import type { DisplayMessage } from '@/lib/chatRuns';
-import type { ChatMessage } from '@/lib/types';
+import type { AgentPlanTask, ChatMessage } from '@/lib/types';
+
+/** Split a persisted `ChatMessage.plan` into the plan skeleton and per-task outcomes. */
+function splitPlan(plan: ChatMessage['plan']): Pick<DisplayMessage, 'plan' | 'taskStates'> {
+  if (!plan || plan.length === 0) return {};
+  const skeleton: AgentPlanTask[] = [];
+  const taskStates: NonNullable<DisplayMessage['taskStates']> = {};
+  for (const task of plan) {
+    skeleton.push({ id: task.id, skill: task.skill, goal: task.goal, depends_on: task.depends_on, agent: task.agent });
+    taskStates[task.id] = {
+      state: task.state,
+      agent: task.agent ?? undefined,
+      skill: task.skill,
+      goal: task.goal,
+      artifact: task.artifact ?? undefined,
+      error: task.error ?? undefined,
+      elapsed_seconds: task.elapsed_seconds ?? undefined,
+      tools: task.tools,
+      token_usage: task.token_usage ?? undefined,
+      budget_note: task.budget_note ?? undefined,
+    };
+  }
+  return { plan: skeleton, taskStates };
+}
 
 interface AttachedFile {
   name: string;
@@ -56,6 +79,20 @@ export function useChat(sessionId: string) {
   }, [sessionId]);
 
   const nextId = () => `hist-${++idCounter.current}-${Date.now()}`;
+
+  // A run settling — normal completion, or reconnecting to one that finished
+  // server-side while this tab was reloaded — means the backend has a fresh
+  // turn this hook hasn't fetched yet. `loadHistory` below de-dupes against
+  // `run.pending` via `releaseIfSettledBefore`, so re-running it here is safe
+  // even for the ordinary path where `onDone` already appended locally.
+  const wasLoadingRef = useRef(run.isLoading);
+  useEffect(() => {
+    if (wasLoadingRef.current && !run.isLoading) {
+      void loadHistory();
+    }
+    wasLoadingRef.current = run.isLoading;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [run.isLoading]);
 
   const messages = useMemo(
     () => (run.pending.length > 0 ? [...historyMessages, ...run.pending] : historyMessages),
@@ -122,6 +159,7 @@ export function useChat(sessionId: string) {
           token_usage: m.token_usage,
           timestamp: Date.now(),
           elapsed_seconds: m.elapsed_seconds ?? undefined,
+          ...splitPlan(m.plan),
         }));
       setHistoryMessages(mapped);
       setTotalTokens(data.total_tokens);
@@ -137,8 +175,24 @@ export function useChat(sessionId: string) {
       return visible > 0 || live.isLoading ? 'loaded' : 'empty';
     } catch {
       if (loadHistoryVersionRef.current !== version) return 'error';
-      setHistoryUnavailable(true);
+
+      const live = chatRuns.getRun(sessionId);
+      const hasLocalRecovery =
+        live.pending.length > 0 ||
+        live.isLoading ||
+        !!live.streamingContent ||
+        live.streamingTools.length > 0;
+
+      if (hasLocalRecovery) {
+        setHistoryMessages(live.pending);
+        setTotalTokens(live.totalTokens || 0);
+        setIterationCount(live.iterationCount || 0);
+        setHistoryUnavailable(false);
+        return 'loaded';
+      }
+
       // Network error or backend unreachable — don't prune sidebar entry
+      setHistoryUnavailable(true);
       return 'error';
     } finally {
       if (loadHistoryVersionRef.current === version) {
@@ -166,6 +220,8 @@ export function useChat(sessionId: string) {
     streamingContent: run.streamingContent,
     streamingTools: run.streamingTools,
     statusMessage: run.statusMessage,
+    plan: run.plan,
+    taskStates: run.taskStates,
     send,
     stop,
     retry,

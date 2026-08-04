@@ -67,7 +67,7 @@ interface MarkdownRendererProps {
 
 export function MarkdownRenderer({ content, className = '' }: MarkdownRendererProps) {
   return (
-    <div className={`markdown-body text-sm leading-relaxed ${className}`}>
+    <div className={`markdown-body min-w-0 break-words text-sm leading-relaxed [overflow-wrap:anywhere] ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}
@@ -145,7 +145,7 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
               href={href}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-medium text-primary-400 underline decoration-primary-700 underline-offset-2 hover:text-primary-300"
+              className="font-medium text-primary-400 underline decoration-primary-700 underline-offset-2 hover:text-primary-300 [overflow-wrap:anywhere]"
             >
               {children}
             </a>

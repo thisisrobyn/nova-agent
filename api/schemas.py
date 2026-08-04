@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -21,6 +21,30 @@ class ToolInfo(BaseModel):
     result: str
 
 
+class A2ATaskState(BaseModel):
+    """A plan task merged with its execution outcome, for history rehydration.
+
+    ``state`` stays "pending" for a task that never got to run — useful when a
+    turn was cancelled mid-plan.
+    """
+
+    id: str
+    skill: str
+    goal: str
+    depends_on: List[str] = Field(default_factory=list)
+    agent: Optional[str] = None
+    state: Literal["pending", "working", "completed", "failed", "canceled", "skipped"] = "pending"
+    artifact: Optional[str] = None
+    error: Optional[str] = None
+    elapsed_seconds: Optional[float] = None
+    #: Tools the agent called, so a reloaded run still shows its activity.
+    tools: List[ToolInfo] = Field(default_factory=list)
+    #: What this agent's share of the turn cost.
+    token_usage: Optional[Dict[str, Any]] = None
+    #: Why an execution budget cut the task short, when one did.
+    budget_note: Optional[str] = None
+
+
 class ChatMessage(BaseModel):
     """A single message in the conversation history."""
 
@@ -30,6 +54,11 @@ class ChatMessage(BaseModel):
     token_usage: Optional[Dict[str, Any]] = None
     #: Wall-clock seconds the assistant took to produce this message.
     elapsed_seconds: Optional[float] = None
+    #: The orchestrator plan that produced this reply, if it was orchestrated.
+    plan: List[A2ATaskState] = Field(default_factory=list)
+    #: Identifier of the orchestrated turn behind this reply, for correlating
+    #: it with the logs and events that run emitted.
+    run_id: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
@@ -49,6 +78,73 @@ class HistoryResponse(BaseModel):
     messages: List[ChatMessage] = Field(default_factory=list)
     total_tokens: int = 0
     iteration_count: int = 0
+    #: Whether a background generation is still running for this session.
+    #: Lets a client that reloaded mid-turn — its SSE connection is gone,
+    #: but the server-side task keeps running — poll until it settles.
+    is_generating: bool = False
+
+
+class A2APlanTask(BaseModel):
+    """One task in an orchestrator plan."""
+
+    id: str
+    skill: str
+    goal: str
+    depends_on: List[str] = Field(default_factory=list)
+    agent: Optional[str] = None
+    #: Set on a task the planner emitted to repair an earlier failure.
+    repairs: Optional[str] = None
+
+
+class A2APlanEvent(BaseModel):
+    """Planner result emitted during a streaming run."""
+
+    type: Literal["plan"] = "plan"
+    tasks: List[A2APlanTask] = Field(default_factory=list)
+
+
+class A2ATaskStartEvent(BaseModel):
+    """Signal that an agent started work on a task."""
+
+    type: Literal["task_start"] = "task_start"
+    id: str
+    agent: str
+    skill: str
+    goal: str
+
+
+class A2ATaskEndEvent(BaseModel):
+    """Signal that an agent finished a task."""
+
+    type: Literal["task_end"] = "task_end"
+    id: str
+    agent: str
+    state: Literal["completed", "failed", "canceled", "skipped"]
+    artifact: Optional[str] = None
+    error: Optional[str] = None
+    elapsed_seconds: Optional[float] = None
+    token_usage: Optional[Dict[str, Any]] = None
+    #: Why an execution budget stopped this agent, when one did.
+    note: Optional[str] = None
+
+
+class A2ATaskRetryEvent(BaseModel):
+    """Signal that a transient failure is being attempted again."""
+
+    type: Literal["task_retry"] = "task_retry"
+    id: str
+    agent: str
+    attempt: int
+    of: int
+    error: Optional[str] = None
+
+
+class A2AReplanEvent(BaseModel):
+    """Signal that the planner replaced failed tasks with a different approach."""
+
+    type: Literal["replan"] = "replan"
+    round: int
+    tasks: List[A2APlanTask] = Field(default_factory=list)
 
 
 class SessionSummary(BaseModel):
@@ -180,6 +276,119 @@ class ProviderTestResponse(BaseModel):
     valid: bool = False
     models: List[ProviderModel] = Field(default_factory=list)
     error: Optional[str] = None
+
+
+# ── Host resource metrics ────────────────────────────────────
+
+class CpuMetrics(BaseModel):
+    """CPU load on the machine running the API."""
+
+    percent: float = 0.0
+    per_core: List[float] = Field(default_factory=list)
+    cores_logical: Optional[int] = None
+    cores_physical: Optional[int] = None
+    frequency_mhz: Optional[float] = None
+    #: Only Linux-like hosts expose this; Windows reports nothing readable.
+    temperature_celsius: Optional[float] = None
+
+
+class MemoryMetrics(BaseModel):
+    """Physical RAM usage on the API host."""
+
+    total_bytes: int = 0
+    used_bytes: int = 0
+    available_bytes: int = 0
+    percent: float = 0.0
+
+
+class SwapMetrics(BaseModel):
+    """Swap usage, omitted entirely on hosts without swap."""
+
+    total_bytes: int = 0
+    used_bytes: int = 0
+    percent: float = 0.0
+
+
+class GpuMetrics(BaseModel):
+    """A single GPU as reported by the vendor tooling.
+
+    Every counter is optional: ``nvidia-smi`` returns ``[N/A]`` for fields a
+    given card or driver does not expose (power draw on laptop GPUs, for one).
+    """
+
+    index: int
+    name: str
+    utilization_percent: Optional[float] = None
+    memory_used_bytes: Optional[int] = None
+    memory_total_bytes: Optional[int] = None
+    memory_percent: Optional[float] = None
+    temperature_celsius: Optional[float] = None
+    power_watts: Optional[float] = None
+
+
+class ProcessMetrics(BaseModel):
+    """NOVA's own footprint inside the host totals."""
+
+    pid: int
+    memory_bytes: int = 0
+    #: Already divided by the logical core count, so it shares the 0–100 axis.
+    cpu_percent: float = 0.0
+    threads: int = 0
+
+
+class DiskMetrics(BaseModel):
+    """A mounted volume the host could run out of space on."""
+
+    device: str = ""
+    mountpoint: str = ""
+    fstype: str = ""
+    total_bytes: int = 0
+    used_bytes: int = 0
+    free_bytes: int = 0
+    percent: float = 0.0
+    #: True for the volume holding the local model weights — the one whose
+    #: filling up actually stops NOVA from working.
+    holds_models: bool = False
+
+
+class DiskIoMetrics(BaseModel):
+    """Host-wide disk throughput, derived from the gap between two polls."""
+
+    read_bytes_per_sec: float = 0.0
+    write_bytes_per_sec: float = 0.0
+
+
+class NetworkMetrics(BaseModel):
+    """Host-wide network throughput, derived from the gap between two polls."""
+
+    sent_bytes_per_sec: float = 0.0
+    received_bytes_per_sec: float = 0.0
+
+
+class SystemMetricsResponse(BaseModel):
+    """A point-in-time snapshot of the API host's resources."""
+
+    #: Epoch seconds — the x value the UI plots this sample at.
+    timestamp: float
+    #: False when the counters could not be read at all; ``error`` says why.
+    available: bool = False
+    error: Optional[str] = None
+    platform: str = ""
+    hostname: str = ""
+    uptime_seconds: Optional[float] = None
+    cpu: Optional[CpuMetrics] = None
+    memory: Optional[MemoryMetrics] = None
+    swap: Optional[SwapMetrics] = None
+    gpus: List[GpuMetrics] = Field(default_factory=list)
+    #: Which tool produced ``gpus`` ("nvidia-smi"), or None when no GPU was found.
+    gpu_backend: Optional[str] = None
+    disks: List[DiskMetrics] = Field(default_factory=list)
+    #: None until a second poll gives the rates something to diff against.
+    disk_io: Optional[DiskIoMetrics] = None
+    network: Optional[NetworkMetrics] = None
+    #: Resolved location of the model weights, if one was found.
+    models_path: Optional[str] = None
+    process: Optional[ProcessMetrics] = None
 
 
 # ── Memory schemas ───────────────────────────────────────────
