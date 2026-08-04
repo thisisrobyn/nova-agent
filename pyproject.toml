@@ -38,6 +38,8 @@ dependencies = [
     "sqlalchemy>=2.0.0",
     # Observability
     "structlog>=24.1.0",
+    # Host resource metrics (CPU / RAM / GPU panel)
+    "psutil>=6.0.0",
 ]
 
 [project.scripts]
