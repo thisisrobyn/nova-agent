@@ -53,6 +53,9 @@ SPEC = AgentSpec(
         "use that provider's tools and no other. If it does not, and both are "
         "connected, use the one the user mentioned most recently in the "
         "conversation; if that is still ambiguous, say so rather than guessing. "
-        "Report the event id and its final date and time in your answer."
+        "After creating or moving an event, report its final date and time and "
+        "the Markdown link the tool returned, so the user reaches it in one "
+        "click. Keep the event id to yourself for follow-up calls — never print "
+        "it in the answer."
     ),
 )

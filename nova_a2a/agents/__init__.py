@@ -11,13 +11,15 @@ from __future__ import annotations
 from typing import Tuple
 
 from nova_a2a.agents._common import AgentSpec
-from nova_a2a.agents import advisor, calendar, docs, research
+from nova_a2a.agents import advisor, calendar, docs, github, mail, research
 
 #: Every agent NOVA ships with, in a stable order.
 INTERNAL_AGENTS: Tuple[AgentSpec, ...] = (
     calendar.SPEC,
+    mail.SPEC,
     research.SPEC,
     docs.SPEC,
+    github.SPEC,
     advisor.SPEC,
 )
 

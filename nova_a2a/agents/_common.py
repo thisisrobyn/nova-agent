@@ -14,8 +14,9 @@ instead of thirty-nine has a context window that fits.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Optional, Tuple
 
+from nova_a2a.budget import Budget
 from nova_a2a.models import AgentSkill
 
 
@@ -41,6 +42,22 @@ class AgentSpec:
 
     #: Appended to the worker system prompt — the agent's operating brief.
     instructions: str = ""
+
+    #: Tighter execution ceiling for this agent, merged over the deployment
+    #: default. Only ever narrows it: an agent cannot grant itself more room
+    #: than the operator allowed. ``None`` means "the default is fine".
+    budget: Optional[Budget] = None
+
+    #: A2A endpoint when this agent lives in another process. Empty for the
+    #: built-in workers. This one field is the seam the module docstring
+    #: promises: set it, and the orchestrator dispatches over the wire instead
+    #: of compiling a local graph, with nothing else changing.
+    endpoint: str = ""
+
+    @property
+    def is_remote(self) -> bool:
+        """Whether this agent is reached over A2A rather than run in-process."""
+        return bool(self.endpoint)
 
     @property
     def skill_ids(self) -> Tuple[str, ...]:

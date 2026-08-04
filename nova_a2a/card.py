@@ -1,8 +1,8 @@
 """NOVA's own public Agent Card.
 
 Served at :data:`nova_a2a.models.WELL_KNOWN_PATH`. The card describes NOVA as
-a single agent — the four internal workers are an implementation detail a
-client has no business knowing about.
+a single agent — the internal workers are an implementation detail a client
+has no business knowing about.
 
 The skill list is built from the agents that are *actually usable*, so the
 card is honest about a given deployment: a fresh install with nothing

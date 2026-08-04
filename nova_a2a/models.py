@@ -97,6 +97,11 @@ class TaskState(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELED = "canceled"
+    #: NOVA extension. The specification models one agent's task lifecycle,
+    #: which has no concept of a task that never ran because another one did
+    #: not produce its input. Reporting that as FAILED made a dependent look
+    #: broken when nothing about it was: it was never attempted.
+    SKIPPED = "skipped"
 
 
 class Artifact(_A2AModel):
@@ -114,6 +119,23 @@ class Artifact(_A2AModel):
     data: Dict[str, Any] = Field(default_factory=dict)
     #: Which internal agent produced it — what makes a run auditable.
     produced_by: str = ""
+    #: True when the task that produced this did not finish cleanly. The
+    #: material is still real and still worth passing downstream, but a
+    #: consumer must be told not to treat it as the complete answer.
+    partial: bool = False
+
+
+class ToolCall(_A2AModel):
+    """One tool a worker invoked while executing its task.
+
+    Kept on the task itself so the activity a run produced survives past the
+    live SSE stream — a reloaded conversation can replay what each agent did,
+    not just what it concluded.
+    """
+
+    name: str
+    #: Truncated rendering of what the tool returned, empty while in flight.
+    result: str = ""
 
 
 class Task(_A2AModel):
@@ -138,6 +160,17 @@ class Task(_A2AModel):
     assigned_to: Optional[str] = None
     artifact: Optional[Artifact] = None
     error: Optional[str] = None
+    #: Every tool the worker called, in call order.
+    tools: List[ToolCall] = Field(default_factory=list)
+    #: Set when an execution budget cut the task short, explaining which
+    #: ceiling was hit. A task can carry this *and* still have completed:
+    #: running out of budget means answering with what was gathered.
+    budget_note: Optional[str] = None
+    #: How many times this task was executed, retries included.
+    attempts: int = 1
+    #: Set on a task the planner emitted to repair an earlier failure, naming
+    #: the task it replaces.
+    repairs: Optional[str] = None
     #: Aggregated token usage for the worker that executed this task.
     token_usage: Optional[Dict[str, Any]] = None
     #: Wall-clock seconds this task took to finish.

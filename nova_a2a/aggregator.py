@@ -11,11 +11,12 @@ get created.
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Callable, Dict, Optional, Sequence
 
 import structlog
 
 from nova_a2a._content import content_to_text
+from nova_a2a._tokens import usage_from_message
 from nova_a2a.models import Task, TaskState
 
 logger = structlog.stdlib.get_logger(__name__)
@@ -34,6 +35,12 @@ _AGGREGATOR_PROMPT = (
     "- If something failed, say plainly what could not be done and why, in one "
     "short sentence. Never invent a result to fill the gap, and never claim "
     "something was done when it failed.\n"
+    "- Answer with everything that DID work, even when part of the request "
+    "failed. A partial answer plus an honest note about the gap is far more "
+    "useful than refusing to answer at all.\n"
+    "- Material marked PARTIAL is real and worth reporting; say that it is "
+    "incomplete. Something marked NOT ATTEMPTED never ran — do not describe it "
+    "as having failed.\n"
     "- Keep links and identifiers exactly as the agents returned them.\n"
     "- Be concise. Do not restate the request back at the user.\n\n"
     "## The user's request\n{request}\n\n"
@@ -42,11 +49,25 @@ _AGGREGATOR_PROMPT = (
 
 
 def _render(tasks: Sequence[Task]) -> str:
-    """Render every task's outcome for the merge prompt."""
+    """Render every task's outcome for the merge prompt.
+
+    Three outcomes, not two. A task that failed while producing partial
+    material is not the same as one that produced nothing, and neither is the
+    same as one that was never attempted — collapsing them into "FAILED" threw
+    away usable results and told the user a task had broken when it had simply
+    never run.
+    """
     blocks = []
     for task in tasks:
         if task.state is TaskState.COMPLETED and task.artifact:
             blocks.append(f"### {task.goal}\nRESULT:\n{task.artifact.text}")
+        elif task.artifact and task.artifact.partial:
+            blocks.append(
+                f"### {task.goal}\nPARTIAL — did not finish ({task.error or 'unknown reason'}), "
+                f"but produced:\n{task.artifact.text}"
+            )
+        elif task.state is TaskState.SKIPPED:
+            blocks.append(f"### {task.goal}\nNOT ATTEMPTED: {task.error or 'no input available'}")
         else:
             reason = task.error or "no result"
             blocks.append(f"### {task.goal}\nFAILED: {reason}")
@@ -62,7 +83,7 @@ def _fallback_answer(tasks: Sequence[Task]) -> str:
     """
     parts = []
     for task in tasks:
-        if task.state is TaskState.COMPLETED and task.artifact:
+        if task.artifact and task.artifact.text.strip():
             parts.append(task.artifact.text.strip())
     if not parts:
         return (
@@ -72,13 +93,21 @@ def _fallback_answer(tasks: Sequence[Task]) -> str:
     return "\n\n".join(parts)
 
 
-async def synthesise(request: str, tasks: Sequence[Task], config: dict | None = None) -> str:
+async def synthesise(
+    request: str,
+    tasks: Sequence[Task],
+    config: dict | None = None,
+    on_usage: Optional[Callable[[Dict[str, int]], None]] = None,
+) -> str:
     """Merge the executed plan into the reply the user sees.
 
     Args:
         request: The user's original message.
         tasks: Every task from the executed plan, in terminal states.
         config: LangGraph runtime config, forwarded to the LLM for token streaming.
+        on_usage: Called with this call's token usage, when the provider
+            reports any. The merge is a full LLM call on top of the workers',
+            so leaving it out under-reports the turn.
 
     Returns:
         The final answer. Never raises and never returns an empty string.
@@ -99,6 +128,10 @@ async def synthesise(request: str, tasks: Sequence[Task], config: dict | None = 
     try:
         response = await llm.ainvoke(prompt, config=config)
         answer = content_to_text(getattr(response, "content", "")).strip()
+        if on_usage is not None:
+            usage = usage_from_message(response)
+            if usage:
+                on_usage(usage)
     except Exception as exc:
         logger.warning("synthesis failed, returning raw results", error=str(exc))
         return _fallback_answer(tasks)

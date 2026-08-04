@@ -44,4 +44,12 @@ class OrchestratorState(dict):
         "plan": List[Task],
         #: The same tasks after execution, in terminal states.
         "results": List[Task],
+        #: Identifier of this orchestrated turn, stamped on every event it
+        #: emits so a run can be grouped and inspected after the fact.
+        "run_id": str,
+        #: Compact transcript of the previous turns, so a follow-up request is
+        #: plannable and the workers can resolve what "the same" refers to.
+        "conversation": str,
+        #: Repair rounds spent. Bounds the executor → repair → executor cycle.
+        "repair_rounds": int,
     }
