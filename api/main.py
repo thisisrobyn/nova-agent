@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from agent.logging_config import configure_logging
 from api.middleware import CorrelationIdMiddleware
 from api.routes import router
+from api.routes_a2a import a2a_router as a2a_rpc_router
 from api.routes_a2a import router as a2a_router
 from api.routes_a2a import well_known_router as a2a_well_known_router
 from api.routes_connections import router as connections_router
@@ -134,8 +135,11 @@ def create_app() -> FastAPI:
     application.include_router(connections_router)
     application.include_router(a2a_router)
     # No prefix: RFC 8615 pins the Agent Card to /.well-known on the origin,
-    # so this one cannot sit under /api/v1 and still be discoverable.
+    # so this one cannot sit under /api/v1 and still be discoverable. The RPC
+    # endpoint joins it there because the card advertises {origin}/a2a, and a
+    # peer must be able to post to the URL it was given.
     application.include_router(a2a_well_known_router)
+    application.include_router(a2a_rpc_router)
 
     @application.get("/health")
     async def health() -> dict:

@@ -9,6 +9,7 @@ Verifies:
 """
 
 import asyncio
+from types import SimpleNamespace
 import json
 from unittest.mock import MagicMock, patch
 
@@ -47,16 +48,20 @@ async def test_background_task_emits_status_then_tokens():
         "token_usage": None,
     }
 
-    async def fake_astream(input_state, config=None):
-        # Simulate on_llm_new_token callbacks by directly calling the handler
-        if config and "callbacks" in config:
-            for cb in config["callbacks"]:
-                await cb.on_llm_new_token("Hello")
-                await cb.on_llm_new_token(" world")
+    async def fake_astream(input_state, config=None, stream_mode=None):
+        # The handler travels through `configurable`, not as a top-level
+        # `callbacks` entry: registering it on the whole run would stream the
+        # planner's JSON and every worker's answer into the chat. Only the node
+        # producing the user-facing reply opts back in — see
+        # `orchestrator._llm_streaming_config`.
+        handler = ((config or {}).get("configurable") or {}).get("token_handler")
+        if handler is not None:
+            await handler.on_llm_new_token("Hello")
+            await handler.on_llm_new_token(" world")
         yield final_output
 
-    with patch("api.routes.compiled_graph") as mock_graph:
-        mock_graph.astream = fake_astream
+    with patch("api.routes.get_orchestrator_graph") as get_graph:
+        get_graph.return_value = SimpleNamespace(astream=fake_astream)
         await _run_langgraph_task("test-session", input_state, buffer)
 
     events = _drain_buffer(buffer, _STREAM_END)
@@ -83,12 +88,12 @@ async def test_background_task_emits_error_on_timeout():
 
     buffer: asyncio.Queue = asyncio.Queue()
 
-    async def fake_astream(input_state, config=None):
+    async def fake_astream(input_state, config=None, stream_mode=None):
         raise httpx.TimeoutException("Connection timed out")
         yield  # noqa: E501
 
-    with patch("api.routes.compiled_graph") as mock_graph:
-        mock_graph.astream = fake_astream
+    with patch("api.routes.get_orchestrator_graph") as get_graph:
+        get_graph.return_value = SimpleNamespace(astream=fake_astream)
         await _run_langgraph_task("test-session", {}, buffer)
 
     events = _drain_buffer(buffer, _STREAM_END)
@@ -105,12 +110,12 @@ async def test_background_task_emits_error_on_connect_error():
 
     buffer: asyncio.Queue = asyncio.Queue()
 
-    async def fake_astream(input_state, config=None):
+    async def fake_astream(input_state, config=None, stream_mode=None):
         raise httpx.ConnectError("Connection refused")
         yield  # noqa: E501
 
-    with patch("api.routes.compiled_graph") as mock_graph:
-        mock_graph.astream = fake_astream
+    with patch("api.routes.get_orchestrator_graph") as get_graph:
+        get_graph.return_value = SimpleNamespace(astream=fake_astream)
         await _run_langgraph_task("test-session", {}, buffer)
 
     events = _drain_buffer(buffer, _STREAM_END)
@@ -142,11 +147,11 @@ async def test_session_state_persisted_after_task_completes():
         "token_usage": None,
     }
 
-    async def fake_astream(input_state, config=None):
+    async def fake_astream(input_state, config=None, stream_mode=None):
         yield final_output
 
-    with patch("api.routes.compiled_graph") as mock_graph:
-        mock_graph.astream = fake_astream
+    with patch("api.routes.get_orchestrator_graph") as get_graph:
+        get_graph.return_value = SimpleNamespace(astream=fake_astream)
         await _run_langgraph_task(session_id, {}, buffer)
 
     # Drain buffer (simulating disconnected client)
@@ -175,12 +180,12 @@ async def test_session_marked_not_generating_on_error():
 
     buffer: asyncio.Queue = asyncio.Queue()
 
-    async def fake_astream(input_state, config=None):
+    async def fake_astream(input_state, config=None, stream_mode=None):
         raise RuntimeError("LLM crashed")
         yield  # noqa: E501
 
-    with patch("api.routes.compiled_graph") as mock_graph:
-        mock_graph.astream = fake_astream
+    with patch("api.routes.get_orchestrator_graph") as get_graph:
+        get_graph.return_value = SimpleNamespace(astream=fake_astream)
         await _run_langgraph_task(session_id, {}, buffer)
 
     session = _sessions[session_id]
@@ -204,11 +209,11 @@ async def test_done_event_includes_response_and_elapsed():
         "token_usage": {"total_tokens": 8},
     }
 
-    async def fake_astream(input_state, config=None):
+    async def fake_astream(input_state, config=None, stream_mode=None):
         yield final_output
 
-    with patch("api.routes.compiled_graph") as mock_graph:
-        mock_graph.astream = fake_astream
+    with patch("api.routes.get_orchestrator_graph") as get_graph:
+        get_graph.return_value = SimpleNamespace(astream=fake_astream)
         await _run_langgraph_task("test-done", {"messages": []}, buffer)
 
     events = _drain_buffer(buffer, _STREAM_END)

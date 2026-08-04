@@ -62,7 +62,7 @@ async def test_chat_endpoint_trivial_request_falls_back_unchanged(monkeypatch, t
     """A request the planner declines must answer exactly like the old graph."""
     monkeypatch.setattr(routes, "_SESSIONS_DIR", tmp_path)
 
-    async def no_plan(_request, _agents):
+    async def no_plan(_request, _agents, conversation=""):
         return []
 
     async def agents():
