@@ -30,6 +30,47 @@ def test_agent_ids_and_skills_are_unique():
     assert len(skill_ids) == len(set(skill_ids))
 
 
+def test_every_declared_tool_name_exists():
+    """A spec may only name tools that are really bound somewhere.
+
+    ``worker.resolve_tools`` drops unknown names silently, which is right at
+    runtime — a Google tool is genuinely absent when only Microsoft is
+    connected — but it means a typo in a spec costs the agent that tool with
+    no error anywhere. This is the check that catches it.
+    """
+    from agent.graph import get_tools
+    from nova_mcp.builtin import _PROVIDER_TOOLS
+
+    # Every tool that *could* be bound: the local belt, plus every provider's
+    # tools whether or not this machine has that account connected.
+    known = {tool.name for tool in get_tools()}
+    known |= {fn.__name__ for tools in _PROVIDER_TOOLS.values() for fn in tools}
+
+    for spec in INTERNAL_AGENTS:
+        unknown = set(spec.tool_names) - known
+        assert not unknown, f"{spec.id} declares tools that do not exist: {sorted(unknown)}"
+
+
+def test_provider_tools_are_reachable_from_some_agent():
+    """Every service tool must belong to a worker, or the orchestrator cannot use it.
+
+    A tool bound into the single-agent graph but named by no spec is invisible
+    to the whole multi-agent path: the worker never sees it and the planner is
+    never offered a skill that would use it. GitHub and mail were both in
+    exactly that state.
+    """
+    from nova_mcp.builtin import _PROVIDER_TOOLS
+
+    claimed = {name for spec in INTERNAL_AGENTS for name in spec.tool_names}
+    orphans = {
+        fn.__name__
+        for tools in _PROVIDER_TOOLS.values()
+        for fn in tools
+        if fn.__name__ not in claimed
+    }
+    assert not orphans, f"service tools no agent can reach: {sorted(orphans)}"
+
+
 def test_advisor_has_no_tools():
     """The reasoning-only worker must stay free of side effects."""
     advisor = next(spec for spec in INTERNAL_AGENTS if spec.id == "advisor")
@@ -219,7 +260,7 @@ async def test_execute_plan_runs_independent_tasks_concurrently(monkeypatch, stu
     running = 0
     peak = 0
 
-    async def slow_run(spec, task, context):
+    async def slow_run(spec, task, context, request="", **_):
         nonlocal running, peak
         running += 1
         peak = max(peak, running)
@@ -249,7 +290,7 @@ async def test_execute_plan_passes_dependency_artifacts(monkeypatch, stub_agent)
     """A dependent task must receive its dependency's artifact, and run after it."""
     seen_context: dict = {}
 
-    async def run(spec, task, context):
+    async def run(spec, task, context, request="", **_):
         seen_context[task.id] = [artifact.text for artifact in context]
         result = task.model_copy(deep=True)
         result.state = TaskState.COMPLETED
@@ -273,10 +314,17 @@ async def test_execute_plan_passes_dependency_artifacts(monkeypatch, stub_agent)
 
 @pytest.mark.asyncio
 async def test_execute_plan_skips_dependents_of_a_failed_task(monkeypatch, stub_agent):
-    """A document must never be written from research that failed."""
+    """A document must never be written from research that produced nothing.
+
+    A failure that still salvaged material does *not* block its dependents —
+    see ``test_a2a_partial_failure.py``. This is the other half of that
+    contract: with no artifact at all there is genuinely no input, and the
+    dependent is marked SKIPPED rather than FAILED, because nothing about it
+    is broken. It was never attempted.
+    """
     ran: list[str] = []
 
-    async def run(spec, task, context):
+    async def run(spec, task, context, request="", **_):
         ran.append(task.id)
         result = task.model_copy(deep=True)
         if task.id == "T1":
@@ -300,7 +348,7 @@ async def test_execute_plan_skips_dependents_of_a_failed_task(monkeypatch, stub_
 
     by_id = {task.id: task for task in results}
     assert "T2" not in ran
-    assert by_id["T2"].state is TaskState.FAILED
+    assert by_id["T2"].state is TaskState.SKIPPED
     # Unrelated work still completes: one failure does not sink the run.
     assert by_id["T3"].state is TaskState.COMPLETED
 
@@ -318,6 +366,164 @@ async def test_execute_plan_fails_tasks_with_no_agent(monkeypatch):
 @pytest.mark.asyncio
 async def test_execute_plan_with_no_tasks():
     assert await executor_mod.execute_plan([]) == []
+
+
+# ── Worker: original-request context ─────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_run_task_includes_the_full_request_when_it_differs_from_the_goal(
+    monkeypatch, stub_agent
+):
+    """A goal that references pasted material must have something to read.
+
+    The planner's goal is a one-sentence summary — "using the job description
+    below" — that does not itself contain the description. Only the user's
+    original message does, so it must reach the worker's prompt.
+    """
+    from nova_a2a import worker as worker_mod
+    from langchain_core.messages import AIMessage
+
+    seen_prompt = None
+
+    class StubGraph:
+        async def astream(self, state, config=None, stream_mode=None):
+            nonlocal seen_prompt
+            seen_prompt = state["messages"][0].content
+            yield {"messages": [AIMessage(content="done")]}
+
+    monkeypatch.setattr(worker_mod, "get_worker_graph", lambda _spec: StubGraph())
+
+    task = Task(id="T1", skill="stub.do", goal="Summarise the job description below")
+    await worker_mod.run_task(
+        stub_agent,
+        task,
+        request="Please do X.\n\nHere's the job description: senior widget engineer, 5 years Python.",
+    )
+
+    assert "senior widget engineer" in seen_prompt
+    assert "Summarise the job description below" in seen_prompt
+
+
+@pytest.mark.asyncio
+async def test_run_task_skips_the_request_block_when_it_matches_the_goal(monkeypatch, stub_agent):
+    """A trivial single-task plan (goal == request) needs no duplicate block."""
+    from nova_a2a import worker as worker_mod
+    from langchain_core.messages import AIMessage
+
+    seen_prompt = None
+
+    class StubGraph:
+        async def astream(self, state, config=None, stream_mode=None):
+            nonlocal seen_prompt
+            seen_prompt = state["messages"][0].content
+            yield {"messages": [AIMessage(content="done")]}
+
+    monkeypatch.setattr(worker_mod, "get_worker_graph", lambda _spec: StubGraph())
+
+    task = Task(id="T1", skill="stub.do", goal="What time is it?")
+    await worker_mod.run_task(stub_agent, task, request="What time is it?")
+
+    assert "Full request the user sent" not in seen_prompt
+
+
+@pytest.mark.asyncio
+async def test_run_task_caps_a_very_long_request(monkeypatch, stub_agent):
+    """A multi-KB pasted document must not bloat every task's prompt unbounded.
+
+    Dumping the whole thing into a small local model's context was observed
+    to make it loop on tool calls instead of converging, ending in a
+    recursion-limit failure — see ``test_run_task_reports_a_friendly_error_
+    on_recursion_limit`` below.
+    """
+    from nova_a2a import worker as worker_mod
+    from langchain_core.messages import AIMessage
+
+    seen_prompt = None
+
+    class StubGraph:
+        async def astream(self, state, config=None, stream_mode=None):
+            nonlocal seen_prompt
+            seen_prompt = state["messages"][0].content
+            yield {"messages": [AIMessage(content="done")]}
+
+    monkeypatch.setattr(worker_mod, "get_worker_graph", lambda _spec: StubGraph())
+
+    long_request = "Do the thing.\n\n" + ("word " * 2000)  # far past the cap
+    task = Task(id="T1", skill="stub.do", goal="Do a specific slice of it")
+    await worker_mod.run_task(stub_agent, task, request=long_request)
+
+    assert len(seen_prompt) < len(long_request)
+    assert "truncated" in seen_prompt
+
+
+@pytest.mark.asyncio
+async def test_run_task_reports_a_friendly_error_on_recursion_limit(monkeypatch, stub_agent):
+    """LangGraph's own message names an internal step budget the user never set."""
+    from nova_a2a import worker as worker_mod
+    from langgraph.errors import GraphRecursionError
+
+    class LoopingGraph:
+        async def astream(self, state, config=None, stream_mode=None):
+            raise GraphRecursionError("Recursion limit of 13 reached without hitting a stop condition.")
+            yield {}  # unreachable; keeps this an async generator
+
+    monkeypatch.setattr(worker_mod, "get_worker_graph", lambda _spec: LoopingGraph())
+
+    task = Task(id="T1", skill="stub.do", goal="research something broad")
+    result = await worker_mod.run_task(stub_agent, task)
+
+    assert result.state == TaskState.FAILED
+    assert "Recursion limit" not in result.error
+    assert "too many steps" in result.error
+
+
+@pytest.mark.asyncio
+async def test_run_task_streams_its_activity_as_it_happens(monkeypatch, stub_agent):
+    """The point of the live diagram: events land while the worker is running.
+
+    Both halves are regressions that shipped together — the worker used to
+    invoke its graph and replay the tool calls from the finished message list,
+    and it called ``.put`` on a sink the orchestrator passes as a plain
+    callback, so every event was swallowed by the emitter's ``except``.
+    """
+    from nova_a2a import worker as worker_mod
+    from langchain_core.messages import AIMessage, ToolMessage
+
+    events: list[dict] = []
+    seen_before_finish: list[list[str]] = []
+
+    async def sink(event):
+        events.append(event)
+
+    class ToolCallingGraph:
+        async def astream(self, state, config=None, stream_mode=None):
+            calling = AIMessage(
+                content="",
+                tool_calls=[{"name": "list_events", "args": {}, "id": "c1"}],
+            )
+            yield {"messages": [calling]}
+            # Whatever the worker emitted by now is what the user would have
+            # seen mid-run — the assertion that the UI is not left waiting.
+            seen_before_finish.append([e["type"] for e in events])
+            yield {
+                "messages": [
+                    calling,
+                    ToolMessage(content="3 events", name="list_events", tool_call_id="c1"),
+                    AIMessage(content="you have 3 meetings"),
+                ]
+            }
+
+    monkeypatch.setattr(worker_mod, "get_worker_graph", lambda _spec: ToolCallingGraph())
+
+    task = Task(id="T1", skill="stub.do", goal="check my calendar")
+    result = await worker_mod.run_task(stub_agent, task, on_event=sink)
+
+    assert "tool_start" in seen_before_finish[0]
+    assert [e["type"] for e in events] == ["task_start", "tool_start", "tool_end", "task_end"]
+    assert result.state is TaskState.COMPLETED
+    # The same activity rides along on the task, so a reload can replay it.
+    assert [(c.name, c.result) for c in result.tools] == [("list_events", "3 events")]
 
 
 # ── Aggregator ───────────────────────────────────────────────────────
@@ -405,7 +611,7 @@ async def test_planner_node_declines_a_single_task_plan(monkeypatch):
     from agent import orchestrator
     from langchain_core.messages import HumanMessage
 
-    async def one_task(_request, _agents):
+    async def one_task(_request, _agents, conversation=""):
         return [Task(id="T1", skill="web.research", goal="x")]
 
     async def agents():
@@ -426,7 +632,7 @@ async def test_planner_node_orchestrates_a_multi_task_plan(monkeypatch):
     from agent import orchestrator
     from langchain_core.messages import HumanMessage
 
-    async def two_tasks(_request, _agents):
+    async def two_tasks(_request, _agents, conversation=""):
         return [
             Task(id="T1", skill="web.research", goal="a"),
             Task(id="T2", skill="advice.generate", goal="b", depends_on=["T1"]),
@@ -476,7 +682,7 @@ async def test_aggregator_node_scopes_streaming_to_its_own_call(monkeypatch):
 
     seen_config = "not called"
 
-    async def fake_synthesise(_request, _results, config=None):
+    async def fake_synthesise(_request, _results, config=None, on_usage=None):
         nonlocal seen_config
         seen_config = config
         return "the answer"
@@ -500,7 +706,7 @@ async def test_planner_node_never_receives_the_token_handler(monkeypatch):
 
     seen_args = []
 
-    async def spy_build_plan(request, agents):
+    async def spy_build_plan(request, agents, conversation=""):
         seen_args.append((request, agents))
         return []
 
@@ -529,3 +735,99 @@ def _async(value):
         return value
 
     return _coro()
+
+
+# ── Runtime config injection ─────────────────────────────────────────
+# Calling a node directly always "works": the config is just an argument.
+# Through the compiled graph it is LangGraph that decides whether to pass one,
+# by matching the parameter's annotation against a fixed list of accepted
+# spellings — and it passes ``None`` silently when the annotation is anything
+# else. That is invisible in unit tests and catastrophic in production: the SSE
+# event sink and the token handler both travel in that config, so a mistyped
+# annotation costs the live agent diagram *and* the streamed answer at once.
+
+
+def test_every_orchestrator_node_declares_config_langgraph_will_inject():
+    """LangGraph must recognise each node's ``config`` parameter."""
+    import warnings
+
+    from langgraph._internal._runnable import RunnableCallable
+
+    from agent import orchestrator
+
+    nodes = (
+        orchestrator.planner_node,
+        orchestrator.executor_node,
+        orchestrator.repair_node,
+        orchestrator.aggregator_node,
+        orchestrator.fallback_node,
+    )
+    for node in nodes:
+        with warnings.catch_warnings():
+            # LangGraph only *warns* about an unrecognised annotation, so the
+            # regression this guards against is otherwise completely silent.
+            warnings.simplefilter("error", UserWarning)
+            wrapped = RunnableCallable(node)
+        assert "config" in wrapped.func_accepts, f"{node.__name__} will not receive config"
+
+
+@pytest.mark.asyncio
+async def test_compiled_graph_delivers_the_event_sink_and_token_handler(monkeypatch):
+    """End to end: a run through the compiled graph must emit plan events and tokens."""
+    from langchain_core.messages import HumanMessage
+
+    from agent import orchestrator
+
+    sink: asyncio.Queue = asyncio.Queue()
+    streamed: list[str] = []
+
+    class _Handler:
+        async def on_llm_new_token(self, token: str) -> None:
+            streamed.append(token)
+
+    async def two_tasks(_request, _agents, conversation=""):
+        return [
+            Task(id="T1", skill="web.research", goal="a"),
+            Task(id="T2", skill="advice.generate", goal="b", depends_on=["T1"]),
+        ]
+
+    async def agents():
+        return list(INTERNAL_AGENTS)
+
+    async def fake_execute_plan(tasks, on_event=None, **_kwargs):
+        assert on_event is not None, "executor_node never received the event sink"
+        await on_event({"type": "plan", "tasks": [t.id for t in tasks]})
+        done = []
+        for task in tasks:
+            finished = task.model_copy(deep=True)
+            finished.state = TaskState.COMPLETED
+            finished.artifact = Artifact(
+                artifact_id=f"{task.id}-artifact", name=task.skill, text=f"{task.id} done"
+            )
+            done.append(finished)
+        return done
+
+    async def fake_synthesise(_request, _results, config=None, on_usage=None):
+        assert config is not None, "aggregator_node never received the token handler"
+        for handler in config["callbacks"]:
+            await handler.on_llm_new_token("hola")
+        return "hola"
+
+    monkeypatch.setattr(orchestrator, "build_plan", two_tasks)
+    monkeypatch.setattr(orchestrator, "available_agents", agents)
+    monkeypatch.setattr(orchestrator, "execute_plan", fake_execute_plan)
+    monkeypatch.setattr(orchestrator, "synthesise", fake_synthesise)
+    orchestrator.reset_orchestrator_graph()
+
+    await orchestrator.get_orchestrator_graph().ainvoke(
+        {"messages": [HumanMessage(content="do two things")], "plan": [], "results": []},
+        config={"configurable": {"event_sink": sink, "token_handler": _Handler()}},
+    )
+    orchestrator.reset_orchestrator_graph()
+
+    events = []
+    while not sink.empty():
+        events.append(sink.get_nowait())
+
+    assert [event["type"] for event in events] == ["plan"]
+    assert streamed == ["hola"]
