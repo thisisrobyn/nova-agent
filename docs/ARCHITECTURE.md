@@ -2,54 +2,63 @@
 
 ## Overview
 
-NOVA follows a **ReAct** (Reasoning + Acting) pattern powered by **LangGraph**. The system has three layers:
+NOVA follows a **ReAct** (Reasoning + Acting) pattern powered by **LangGraph**. The system has four layers:
 
 1. **Frontend** -- React 19 + Vite 7 + Tailwind CSS 4 web app where the user interacts via chat
-2. **Backend** -- FastAPI server (uvicorn) that manages sessions, streams responses, and exposes 22 REST endpoints
-3. **Agent** -- LangGraph state machine that reasons, calls tools, and uses Ollama as the local LLM backend
+2. **Backend** -- FastAPI server (uvicorn) that manages sessions, streams responses, and exposes the REST endpoints
+3. **Orchestrator** -- a supervisor graph that decides whether a request is worth splitting across specialised agents, and runs them if so
+4. **Agent** -- LangGraph state machine that reasons, calls tools, and uses Ollama as the local LLM backend
+
+Layers 3 and 4 are alternatives, not a stack. Every turn enters the
+orchestrator; a request it declines to split falls through to the single-agent
+graph described in this document, which is the path most turns take. See
+[Multi-agent](MULTI_AGENT.md) for the other one.
 
 ## Message Flow
 
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#052e16','primaryTextColor':'#86efac','primaryBorderColor':'#22c55e','lineColor':'#22c55e','secondaryColor':'#0d0d0d','tertiaryColor':'#0d0d0d','fontFamily':'ui-monospace, SFMono-Regular, monospace','fontSize':'13px'}}}%%
+flowchart TD
+    subgraph browser["Browser — React 19"]
+        U["User types a message"]
+        RENDER["Answer streams in word by word<br/>live agent diagram updates as it goes"]
+    end
+
+    subgraph server["Server — FastAPI"]
+        SSE["POST /chat/stream<br/>detached background task"]
+        STATE["Build the input state<br/>inject memory_context (facts + episodes)"]
+        BUF[("SSE event buffer")]
+        BG["Fire-and-forget: extract facts,<br/>summarise the episode"]
+    end
+
+    subgraph orchestrator["Orchestrator — LangGraph"]
+        PLAN["planner"]
+        WORK["executor<br/>specialised agents, in parallel"]
+        MERGE["aggregator"]
+        SINGLE["fallback<br/>single-agent ReAct loop"]
+    end
+
+    U --> SSE --> STATE --> PLAN
+    PLAN -- "plan" --> WORK --> MERGE
+    PLAN -- "no plan" --> SINGLE
+    WORK -. "plan · task · tool events" .-> BUF
+    MERGE -. "answer tokens" .-> BUF
+    SINGLE -. "answer tokens · tool events" .-> BUF
+    BUF --> RENDER
+    MERGE --> BG
+    SINGLE --> BG
+
+    classDef node fill:#052e16,stroke:#22c55e,stroke-width:1px,color:#86efac;
+    classDef store fill:#0d0d0d,stroke:#15803d,stroke-width:1px,color:#4ade80;
+    class U,RENDER,SSE,STATE,BG,PLAN,WORK,MERGE,SINGLE node;
+    class BUF store;
 ```
-Browser (React 19)                 Server (FastAPI)                  Agent (LangGraph)
-──────────────────                 ────────────────                  ─────────────────
-User types message
-        |
-        v
-  POST /chat/stream ----------->  SSE streaming endpoint
-                                        |
-                                        v
-                                 Create input state
-                                        |
-                                 Inject memory_context ---+
-                                 (facts + episodes)       |
-                                        |                 |
-                                        v                 |
-                                 Pass to agent  <---------+
-                                        |
-                                        v
-                                                       agent_node
-                                                          |
-                                                    LLM decides:
-                                                    needs tool?
-                                                    /         \
-                                                  Yes          No
-                                                   |            |
-                                              tools node     respond
-                                              (execute)        |
-                                                   |            |
-                                              back to       <--+
-                                              agent_node
-                                                          |
-                                 <--- SSE tokens ---------+
-        |
-  Render tokens
-  word by word
-                                 Fire-and-forget:
-                                 asyncio.create_task()
-                                 -> extract facts
-                                 -> summarize episode
-```
+
+Both the SSE event buffer and the LLM token callback reach the graph through
+LangGraph's runtime `config`, which is why every node in `agent/orchestrator.py`
+annotates its `config` parameter as `Optional[RunnableConfig]` and nothing else:
+LangGraph matches that annotation literally and passes `None` for any other
+spelling, which costs the live diagram and the streamed answer at once.
 
 ## Agent State (`NOVAState`)
 
@@ -64,7 +73,45 @@ The agent keeps a state dictionary (`NOVAState`) that travels through every node
 | `total_tokens` | `int` | Cumulative token usage |
 | `token_usage` | `dict` | Last turn's prompt/completion/total tokens |
 
-## Graph Nodes
+## Orchestrator Nodes (in `agent/orchestrator.py`)
+
+The supervisor graph every turn enters first. It owns the decision of *how many
+agents* a request deserves; the single-agent graph below owns what one agent
+does with its tools.
+
+### `planner_node`
+
+Turns the request — plus a bounded slice of the conversation, so a follow-up
+like "and now the same for Friday" is plannable at all — into a DAG of tasks,
+each naming a *skill* rather than an agent. Returning fewer than two tasks is
+how it declines: one task is not orchestration, it is a detour, and the run
+routes to `fallback` instead.
+
+### `executor_node`
+
+Runs the DAG in dependency waves, so independent tasks overlap rather than
+queue. Each task executes under its own budget and reports its lifecycle
+through the SSE event sink, which is what draws the live diagram in the chat.
+
+### `repair_node`
+
+Asks the planner for a *different* approach to whatever failed, once
+(`MAX_REPAIR_ROUNDS`). Tasks that already succeeded keep their artifacts and
+are never re-run.
+
+### `aggregator_node`
+
+Merges the workers' artifacts into the single reply the user reads — and this
+is the node whose LLM call streams, so the answer types itself out. It has no
+tools on purpose: everything that could act has already acted.
+
+### `fallback_node`
+
+Invokes the single-agent graph as a subgraph, rather than reimplementing it.
+Memory injection, knowledge-base retrieval and the invented-tool recovery all
+live there, and a request that skipped planning deserves every one of them.
+
+## Graph Nodes (the single-agent graph)
 
 ### `agent_node` (in `agent/nodes.py`)
 
@@ -150,30 +197,21 @@ This avoids blocking the response stream.
 
 NOVA includes a fully offline Retrieval-Augmented Generation pipeline.
 
-```
-Upload document
-      |
-      v
-  PyMuPDF (PDF) / text loader
-      |
-      v
-  RecursiveCharacterTextSplitter
-  (chunk_size=1000, overlap=200)
-      |
-      v
-  OllamaEmbeddings (nomic-embed-text)
-      |
-      v
-  ChromaDB (persistent at data/chroma/)
-      |
-      v
-  rag_search tool
-      |
-      v
-  Similarity search with score threshold
-      |
-      v
-  Top chunks returned to agent
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#052e16','primaryTextColor':'#86efac','primaryBorderColor':'#22c55e','lineColor':'#22c55e','secondaryColor':'#0d0d0d','tertiaryColor':'#0d0d0d','fontFamily':'ui-monospace, SFMono-Regular, monospace','fontSize':'13px'}}}%%
+flowchart TD
+    UP["Upload document"] --> LOAD["PyMuPDF for PDFs<br/>text loader otherwise"]
+    LOAD --> SPLIT["RecursiveCharacterTextSplitter<br/>chunk 1000 · overlap 200"]
+    SPLIT --> EMB["OllamaEmbeddings<br/>nomic-embed-text"]
+    EMB --> DB[("ChromaDB<br/>persistent at data/chroma/")]
+    DB --> TOOL["rag_search tool"]
+    TOOL --> SEARCH["Similarity search<br/>with a score threshold"]
+    SEARCH --> OUT["Top chunks returned to the agent"]
+
+    classDef node fill:#052e16,stroke:#22c55e,stroke-width:1px,color:#86efac;
+    classDef store fill:#0d0d0d,stroke:#15803d,stroke-width:1px,color:#4ade80;
+    class UP,LOAD,SPLIT,EMB,TOOL,SEARCH,OUT node;
+    class DB store;
 ```
 
 - **Vector store**: ChromaDB, in-process, persistent at `data/chroma/`
@@ -275,18 +313,26 @@ data/
 - **Logging**: `structlog` for structured, correlation-aware logging
 - **Health**: Enhanced `/health` endpoint reporting subsystem status (scheduler, memory, Ollama connectivity)
 
-### REST Routes (22 endpoints under `/api/v1`)
+### REST Routes
+
+Forty endpoints under `/api/v1`, plus `GET /health` and the two A2A endpoints
+that RFC 8615 pins to the origin. [API_REFERENCE.md](API_REFERENCE.md) documents
+each one with examples.
 
 | Group | Endpoints |
 |-------|-----------|
-| Chat | `POST /chat`, `POST /chat/stream` |
-| History | `GET /history`, `GET /history/{id}`, `DELETE /history/{id}`, `PUT /history/{id}/title` |
-| Settings | `GET /settings`, `PUT /settings` |
-| Ollama | `GET /ollama/models` |
-| Memory | `GET /memory/facts`, `DELETE /memory/facts/{id}`, `GET /memory/episodes`, `DELETE /memory/episodes/{id}` |
+| Chat | `POST /chat`, `POST /chat/stream`, `POST /chat/stop/{id}`, `POST /chat/title` |
+| History | `GET /chat/history`, `GET /chat/history/{id}`, `DELETE /chat/history/{id}` |
+| Settings | `GET /settings`, `PUT /settings`, `POST /providers/test` |
+| Ollama | `GET /ollama/models`, `GET /ollama/status`, `POST /ollama/start`, `GET /ollama/catalog`, `POST /ollama/pull` |
+| System | `GET /system/metrics` |
+| Memory | `GET /memory/facts`, `DELETE /memory/facts`, `GET /memory/episodes`, `DELETE /memory/episodes` |
 | Documents | `POST /documents/upload`, `GET /documents`, `GET /documents/{id}`, `DELETE /documents/{id}` |
-| Scheduler | `POST /scheduler/tasks`, `GET /scheduler/tasks`, `PUT /scheduler/tasks/{id}`, `DELETE /scheduler/tasks/{id}`, `GET /scheduler/tasks/{id}/logs` |
-| Health | `GET /health` |
+| Scheduler | `GET|POST /scheduler/tasks`, `GET|PUT|DELETE /scheduler/tasks/{id}`, `GET /scheduler/tasks/{id}/logs` |
+| Connections | `GET /connections`, `POST /connections/{provider}/authorize`, `GET /connections/{provider}/callback`, `PUT|DELETE /connections/{provider}/credentials`, `DELETE /connections/{provider}`, the two GitHub App setup routes |
+| Multi-agent | `GET /agents` |
+| GitHub | `GET /github/roadmap` |
+| Origin | `GET /health`, `GET /.well-known/agent-card.json`, `POST /a2a` |
 
 ## Key Modules
 
@@ -295,10 +341,10 @@ data/
 | `agent/graph.py` | Build LangGraph, manage tool registry, lazy graph compilation |
 | `agent/nodes.py` | LLM reasoning node, tool routing, memory context injection |
 | `agent/state.py` | `NOVAState` TypedDict with `add_messages` reducer |
-| `agent/llm.py` | LLM singleton (Ollama via OpenAI-compatible API) + runtime reconfiguration |
+| `agent/llm.py` | LLM singleton (Ollama, OpenAI or Anthropic) + runtime reconfiguration |
 | `agent/logging_config.py` | structlog configuration and correlation ID propagation |
 | `api/main.py` | FastAPI app factory, CORS, lifespan (memory, MCP, scheduler) |
-| `api/routes.py` | 22 REST endpoints: chat, stream, history, settings, memory, documents, scheduler |
+| `api/routes.py` | Chat, streaming, history, settings, Ollama, system metrics, memory, documents, scheduler |
 | `api/schemas.py` | Pydantic request/response models |
 | `api/middleware.py` | CorrelationIdMiddleware for request tracing |
 | `memory/__init__.py` | Singleton facade for the memory subsystem |
@@ -321,3 +367,11 @@ data/
 | `scheduler/manager.py` | APScheduler lifecycle and job management |
 | `nova_mcp/client.py` | Load tools from external MCP servers |
 | `nova_mcp/server.py` | Expose NOVA tools via MCP protocol |
+| `agent/orchestrator.py` | Supervisor graph: plan → execute → repair → aggregate, with the single-agent fallback |
+| `nova_a2a/planner.py` | Request → task DAG, and repair plans when tasks fail |
+| `nova_a2a/executor.py` | Runs the DAG in dependency waves, with retries and cancellation |
+| `nova_a2a/worker.py` | Executes one task, locally or by dispatching to a peer |
+| `nova_a2a/budget.py` | Per-task execution budget (steps, tools, time, repeats) and retry policy |
+| `nova_a2a/registry.py` | Skill → agent index; discovers remote peers from their Agent Cards |
+| `nova_a2a/client.py` | Outbound A2A `message/send` to a remote agent |
+| `nova_a2a/aggregator.py` | Merges the workers' artifacts into one answer |

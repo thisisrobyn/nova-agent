@@ -32,6 +32,8 @@ a cloud model.
 - 🌐 **Web search** — real-time search via Tavily, with a DuckDuckGo fallback
 - 🐍 **Code execution** — writes and runs Python in a sandboxed subprocess, self-healing on errors
 - ⏰ **Scheduled tasks** — cron or interval jobs that run agent prompts on their own
+- 🕸️ **Multi-agent (A2A)** — splits a request into a task graph, runs specialised agents in
+  parallel, and shows the whole run as a live diagram
 - 🔌 **MCP** — connects to external tool servers, and exposes its own tools to other agents
 - ⚡ **Real-time streaming** — responses appear word-by-word, and can be stopped mid-flight
 - 🎨 **Modern web UI** — React app with markdown, syntax highlighting, drag & drop, i18n
@@ -75,26 +77,30 @@ To let NOVA into your Google, Microsoft or GitHub account, open the sidebar →
 | [Architecture](docs/ARCHITECTURE.md) | Graph, nodes, state, storage layout |
 | [Tools](docs/TOOLS.md) | Every tool, and how to write your own |
 | [MCP](docs/MCP.md) | Client, server, and the per-account service servers |
+| [Multi-agent (A2A)](docs/MULTI_AGENT.md) | Orchestration, execution budgets, retries, remote agents |
 | [API reference](docs/API_REFERENCE.md) | Every REST endpoint with examples |
 | [Memory & RAG](docs/MEMORY_RAG.md) | Facts, episodes, embeddings, retrieval |
 | [Scheduler](docs/SCHEDULER.md) | Cron and interval tasks |
 
 ## How it works (the simple version)
 
-```
-You type a message
-        ↓
-   NOVA reads it
-        ↓
-   Does it need a tool?
-     /         \
-   Yes          No
-    ↓            ↓
- Runs the      Writes a
-  tool          reply
-    ↓            ↓
- Goes back    Sends it
- to thinking   to you
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#052e16','primaryTextColor':'#86efac','primaryBorderColor':'#22c55e','lineColor':'#22c55e','secondaryColor':'#0d0d0d','tertiaryColor':'#0d0d0d','fontFamily':'ui-monospace, SFMono-Regular, monospace','fontSize':'13px'}}}%%
+flowchart TD
+    A["You type a message"] --> B{"Several separate jobs<br/>in one request?"}
+    B -- "yes" --> C["NOVA splits it into tasks and runs<br/>specialised agents in parallel"]
+    C --> D["Merges everything into one reply"]
+    B -- "no" --> E{"Does it need a tool?"}
+    E -- "yes" --> F["Runs the tool"]
+    F --> E
+    E -- "no" --> G["Writes the reply"]
+    D --> H["You watch it appear, word by word"]
+    G --> H
+
+    classDef node fill:#052e16,stroke:#22c55e,stroke-width:1px,color:#86efac;
+    classDef choice fill:#0d0d0d,stroke:#15803d,stroke-width:1px,color:#4ade80;
+    class A,C,D,F,G,H node;
+    class B,E choice;
 ```
 
 1. You write something like _"What's 2^10?"_
@@ -103,6 +109,12 @@ You type a message
 4. The calculator runs and returns `1024`
 5. NOVA writes a nice reply: _"2¹⁰ = 1024"_
 6. You see the answer appear in real time, word by word
+
+Ask for several things at once — _"book me a slot on Friday, research the
+competition and draft a summary"_ — and NOVA plans the work as a task graph
+instead, runs the independent parts across specialised agents at the same time,
+and shows you that graph live while it happens. See
+[docs/MULTI_AGENT.md](docs/MULTI_AGENT.md).
 
 After the reply is sent, a background pass extracts anything worth remembering and stores it
 for future conversations.
@@ -113,6 +125,7 @@ for future conversations.
 nova-agent/
 ├── agent/                  # The brain
 │   ├── graph.py            #   LangGraph agent loop (agent ↔ tools)
+│   ├── orchestrator.py     #   Supervisor: plan → execute → repair → aggregate
 │   ├── nodes.py            #   LLM reasoning node & tool router
 │   ├── state.py            #   Conversation state definition
 │   ├── llm.py              #   Provider/model setup & runtime config
@@ -132,11 +145,18 @@ nova-agent/
 │   └── crypto.py           #   Fernet encryption at rest
 ├── memory/                 # Facts, episodes, and the RAG vector store
 ├── scheduler/              # APScheduler jobs, store and models
-├── nova_mcp/               # Model Context Protocol
+├── nova_mcp/               # Model Context Protocol (agent ↔ tools)
 │   ├── server.py           #   Expose NOVA's tools to other apps
 │   ├── client.py           #   Connect to external MCP tool servers
 │   ├── servers/            #   Per-account servers: google, microsoft, github
 │   └── builtin.py          #   Binds those same tools into the agent graph
+├── nova_a2a/               # Agent-to-agent orchestration
+│   ├── planner.py          #   Request → task DAG, and repairs when tasks fail
+│   ├── executor.py         #   Runs the DAG in waves, with retries and cancel
+│   ├── worker.py           #   Runs one task, locally or on a remote peer
+│   ├── agents/             #   The specialists: research, calendar, mail, docs, github, advisor
+│   ├── budget.py           #   Per-task limits: steps, tools, time, repeats
+│   └── aggregator.py       #   Merges the agents' results into one answer
 ├── api/                    # REST API (backend)
 │   ├── main.py             #   FastAPI app with MCP lifecycle
 │   ├── routes.py           #   Chat, streaming, settings, history endpoints
@@ -252,7 +272,7 @@ Bound only while the matching account is connected — see [docs/CONNECTIONS.md]
 | Layer | Technology |
 |-------|-----------|
 | **LLM** | Ollama (local, default), or OpenAI / Anthropic via `langchain-*` |
-| **Orchestration** | LangGraph + LangChain (ReAct agent pattern) |
+| **Orchestration** | LangGraph + LangChain (ReAct agent, plus an A2A supervisor graph) |
 | **Backend** | FastAPI + Uvicorn (async REST API with SSE streaming) |
 | **Frontend** | React 19 + TypeScript + Vite 7 + Tailwind CSS v4 |
 | **Memory** | SQLite (aiosqlite) + ChromaDB for embeddings |
