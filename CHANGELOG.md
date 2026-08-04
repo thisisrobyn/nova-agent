@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/thisisrober/nova-agent/compare/v0.7.0...v0.8.0) (2026-08-04)
+
+
+### Features
+
+* **a2a:** A2A orchestrator — planner, executor, budgets and live run diagrams ([#15](https://github.com/thisisrober/nova-agent/issues/15)) ([6b14b36](https://github.com/thisisrober/nova-agent/commit/6b14b3619a98037774de86ce4dfe9bd61b3ef364))
+
 ## [0.7.0](https://github.com/thisisrober/nova-agent/compare/v0.6.0...v0.7.0) (2026-08-03)
 
 
