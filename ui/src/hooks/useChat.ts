@@ -19,6 +19,9 @@ function splitPlan(plan: ChatMessage['plan']): Pick<DisplayMessage, 'plan' | 'ta
       artifact: task.artifact ?? undefined,
       error: task.error ?? undefined,
       elapsed_seconds: task.elapsed_seconds ?? undefined,
+      tools: task.tools,
+      token_usage: task.token_usage ?? undefined,
+      budget_note: task.budget_note ?? undefined,
     };
   }
   return { plan: skeleton, taskStates };

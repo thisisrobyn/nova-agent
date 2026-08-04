@@ -7,8 +7,9 @@ import { WelcomeScreen } from './WelcomeScreen';
 import { NovaSparkle } from '@/components/ui/NovaSparkle';
 import { MarkdownRenderer } from '@/components/ui/MarkdownRenderer';
 import { ToolBadge } from './ToolBadge';
-import { AgentFlowLive, type TaskStateInfo } from './AgentFlowLive';
+import { AgentFlow, MESSAGE_COLUMN_CLASS, type TaskStateInfo } from './AgentFlowLive';
 import { GuestBanner } from '@/components/auth/GuestBanner';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { useToast } from '@/components/ui/Toast';
 import { useI18n } from '@/lib/i18n';
 import { isSupported, readFile, type FileReadResult } from '@/lib/fileUtils';
@@ -17,12 +18,7 @@ import type { AgentPlanTask, ToolInfo } from '@/lib/types';
 /** Rotating placeholder text for the plain (non-orchestrated) waiting state —
  * there is no per-step diagram to look at there, so the copy itself has to
  * communicate that something is still happening. */
-const THINKING_PHRASES = [
-  'Reading the conversation…',
-  'Thinking it through…',
-  'Working on a reply…',
-  'Almost there…',
-];
+const THINKING_KEYS = ['chat.thinking1', 'chat.thinking2', 'chat.thinking3', 'chat.thinking4'];
 
 function useCyclingText(phrases: string[], active: boolean, intervalMs = 2800): string {
   const [index, setIndex] = useState(0);
@@ -81,7 +77,6 @@ export function ChatArea({
   error,
   streamingContent,
   streamingTools,
-  statusMessage,
   plan = [],
   taskStates = {},
   onSend,
@@ -105,22 +100,24 @@ export function ChatArea({
   // Show banner after first guest message
   const showGuestBanner = isGuest && guestMessageCount > 0 && (!bannerDismissed || guestLimitReached);
 
-  // Once a plan exists the diagram itself carries the detail, so the fallback
-  // text only needs to name the phase; without one there's nothing else on
-  // screen, so it rotates through a few phrases to read as alive rather than
-  // stuck. Both stop the moment tokens or a tool chip actually start.
+  // The backend's own status text ("Processing", "Loading model...") is an
+  // internal signal, not copy — this always drives the bubble's text itself,
+  // so a slow model reads as "still working" rather than stuck on a raw
+  // backend string forever. While orchestrating, the flow diagram above
+  // already shows per-agent progress, so this line only needs to cover the
+  // synthesis step after every agent has settled.
   const orchestrating = plan.length > 0;
   const allTasksSettled = orchestrating && plan.every((t) => {
     const s = taskStates[t.id]?.state;
     return s === 'completed' || s === 'failed';
   });
   const cyclingThinkingText = useCyclingText(
-    THINKING_PHRASES,
-    isLoading && !orchestrating && !streamingContent && !statusMessage,
+    THINKING_KEYS.map((key) => t(key)),
+    isLoading && !orchestrating && !streamingContent,
   );
   const fallbackWaitingText = orchestrating
     ? allTasksSettled
-      ? 'Combining what the agents found…'
+      ? t('chat.combining')
       : null
     : cyclingThinkingText;
 
@@ -326,90 +323,81 @@ export function ChatArea({
         /* Chat layout: messages scrollable + input at bottom */
         <>
           <div className="flex-1 overflow-y-auto px-4 py-6 scrollbar-thin">
-            <div className="mx-auto max-w-3xl space-y-4">
+            {/* Wider than the message measure on purpose: bubbles cap
+                themselves at `MESSAGE_COLUMN_CLASS`, and the extra room is
+                what the agent flow diagram expands into. */}
+            <div className="mx-auto max-w-5xl space-y-4">
               <AnimatePresence mode="popLayout">
                 {messages.map((msg, idx) => (
-                  <ChatMessage
-                    key={msg.id}
-                    id={msg.id}
-                    role={msg.role}
-                    content={msg.content}
-                    tools_used={msg.tools_used}
-                    token_usage={msg.token_usage}
-                    elapsed_seconds={msg.elapsed_seconds}
-                    isNew={idx >= messages.length - 2}
-                    onEdit={msg.role === 'user' && !isLoading ? onEditMessage : undefined}
-                    plan={msg.plan}
-                    taskStates={msg.taskStates}
-                  />
+                  // One malformed message (e.g. non-string content that slipped
+                  // past validation) must show as a broken bubble, not take the
+                  // whole conversation down — there is no recovering a render
+                  // crash without a boundary, and the default is to unmount
+                  // everything.
+                  <ErrorBoundary key={msg.id} label="chat-message">
+                    <ChatMessage
+                      id={msg.id}
+                      role={msg.role}
+                      content={msg.content}
+                      tools_used={msg.tools_used}
+                      token_usage={msg.token_usage}
+                      elapsed_seconds={msg.elapsed_seconds}
+                      isNew={idx >= messages.length - 2}
+                      onEdit={msg.role === 'user' && !isLoading ? onEditMessage : undefined}
+                      plan={msg.plan}
+                      taskStates={msg.taskStates}
+                    />
+                  </ErrorBoundary>
                 ))}
               </AnimatePresence>
 
               {isLoading && (
-                <div className="flex gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-primary-500">
-                    <NovaSparkle className="h-5 w-5" thinking />
-                  </div>
-                  <div className="max-w-[75%] space-y-2 rounded-xl border border-surface-700/50 bg-surface-900 px-4 py-3">
-                    {plan.length > 0 && <AgentFlowLive plan={plan} taskStates={taskStates} />}
+                <div className="flex flex-col gap-2">
+                  {/* The live diagram sits outside the reply bubble and uses
+                      the full column width — inside a message-width box a plan
+                      with several agents gets clipped. */}
+                  {orchestrating && <AgentFlow plan={plan} taskStates={taskStates} />}
 
-                    {streamingTools.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 pb-1">
-                        {streamingTools.map((tool, i) => (
-                          <ToolBadge key={`${tool.name}-${i}`} name={tool.name} result={tool.result} />
-                        ))}
+                  {(streamingContent || streamingTools.length > 0 || fallbackWaitingText) && (
+                    <div className={`flex gap-3 ${MESSAGE_COLUMN_CLASS}`}>
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-primary-500">
+                        <NovaSparkle className="h-5 w-5" thinking />
                       </div>
-                    )}
+                      <div className="min-w-0 max-w-[75%] space-y-2 rounded-xl border border-surface-700/50 bg-surface-900 px-4 py-3">
+                        {streamingTools.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 pb-1">
+                            {streamingTools.map((tool, i) => (
+                              <ToolBadge key={`${tool.name}-${i}`} name={tool.name} result={tool.result} />
+                            ))}
+                          </div>
+                        )}
 
-                    {streamingContent ? (
-                      <div className="text-surface-200">
-                        <MarkdownRenderer content={streamingContent} />
-                        <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-primary-500/70" />
+                        {streamingContent ? (
+                          <div className="text-surface-200">
+                            <MarkdownRenderer content={streamingContent} />
+                            <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-primary-500/70" />
+                          </div>
+                        ) : fallbackWaitingText ? (
+                          <AnimatePresence mode="wait">
+                            <motion.div
+                              key={fallbackWaitingText}
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              className="flex items-center gap-2"
+                            >
+                              <motion.span
+                                className="h-1.5 w-1.5 rounded-full bg-primary-500"
+                                animate={{ opacity: [0.3, 1, 0.3] }}
+                                transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
+                              />
+                              <span className="text-xs text-surface-400">{fallbackWaitingText}</span>
+                            </motion.div>
+                          </AnimatePresence>
+                        ) : null}
                       </div>
-                    ) : statusMessage ? (
-                      <div className="flex items-center gap-2">
-                        <motion.span
-                          className="h-1.5 w-1.5 rounded-full bg-primary-500"
-                          animate={{ opacity: [0.3, 1, 0.3] }}
-                          transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
-                        />
-                        <span className="text-xs text-surface-400">{statusMessage}</span>
-                      </div>
-                    ) : fallbackWaitingText ? (
-                      <AnimatePresence mode="wait">
-                        <motion.div
-                          key={fallbackWaitingText}
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0 }}
-                          className="flex items-center gap-2"
-                        >
-                          <motion.span
-                            className="h-1.5 w-1.5 rounded-full bg-primary-500"
-                            animate={{ opacity: [0.3, 1, 0.3] }}
-                            transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
-                          />
-                          <span className="text-xs text-surface-400">{fallbackWaitingText}</span>
-                        </motion.div>
-                      </AnimatePresence>
-                    ) : (
-                      <div className="flex items-center gap-1.5">
-                        {[0, 1, 2].map((i) => (
-                          <motion.span
-                            key={i}
-                            className="h-1.5 w-1.5 rounded-full bg-primary-500"
-                            animate={{ opacity: [0.3, 1, 0.3] }}
-                            transition={{
-                              duration: 1,
-                              repeat: Infinity,
-                              delay: i * 0.2,
-                              ease: 'easeInOut',
-                            }}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               )}
 

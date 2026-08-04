@@ -140,6 +140,18 @@
     background-color: rgba(34, 197, 94, 0.6);
   }
 
+  /* Scrollable, but with no scrollbar drawn on either axis — for surfaces that
+     are navigated by dragging or the wheel (e.g. the agent flow canvas). */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+    display: none;
+  }
+
   .code-scroll {
     scrollbar-width: thin;
     scrollbar-color: rgba(34, 197, 94, 0.15) transparent;

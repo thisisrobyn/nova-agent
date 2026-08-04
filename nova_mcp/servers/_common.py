@@ -156,6 +156,24 @@ def bullet_list(items: Iterable[str], empty: str) -> str:
     return "\n".join(rendered) if rendered else empty
 
 
+def event_result(action: str, title: str, event_id: str, url: str) -> str:
+    """Phrase a calendar mutation so the agent answers with a link, not an id.
+
+    Both are returned on purpose: the URL is what the user should see, while
+    the id is what ``*_update_calendar_event`` and ``*_delete_calendar_event``
+    need later in the same conversation. The wording is directive because this
+    string is read by the LLM, never shown verbatim.
+    """
+    label = title or "the event"
+    if not url:
+        return f"Event '{label}' {action}. No web link was returned. id={event_id}"
+    return (
+        f"Event '{label}' {action}. Show the user the Markdown link "
+        f"[{label}]({url}) so they can open it in one click. Never print the "
+        f"raw id — it is only for your own follow-up tool calls: id={event_id}"
+    )
+
+
 def truncate(text: str | None, limit: int = 200) -> str:
     """Collapse whitespace and cut long text so results stay token-cheap."""
     if not text:

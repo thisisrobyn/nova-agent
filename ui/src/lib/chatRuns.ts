@@ -1,20 +1,7 @@
 import { getHistory, sendMessageStream, stopGeneration } from './api';
-import type { AgentPlanTask, TokenUsage, ToolInfo } from './types';
+import type { AgentPlanTask, AgentTaskRuntimeState, TokenUsage, ToolInfo } from './types';
 
-type TaskStateMap = Record<
-  string,
-  {
-    state: 'pending' | 'working' | 'completed' | 'failed';
-    agent?: string;
-    skill?: string;
-    goal?: string;
-    artifact?: string;
-    error?: string;
-    elapsed_seconds?: number;
-    /** Tools this task's agent has called so far, in order. */
-    tools?: { name: string; result?: string }[];
-  }
->;
+type TaskStateMap = Record<string, AgentTaskRuntimeState>;
 
 /**
  * Per-session generation store.
@@ -112,12 +99,29 @@ function persistRuns(): void {
   }
 }
 
-function stripLivePlanFromPending(pending: DisplayMessage[]): DisplayMessage[] {
-  return pending.map((message) => ({
-    ...message,
-    plan: undefined,
-    taskStates: undefined,
-  }));
+/**
+ * Validate and clean a persisted pending message before it re-enters the app.
+ *
+ * `localStorage` round-trips through JSON, so nothing here is type-checked —
+ * a message written before a bug fix landed (e.g. `content` as a raw block
+ * array instead of a string, from the token-streaming leak this replaces)
+ * would otherwise reach `MarkdownRenderer`, which throws on non-string
+ * children with no boundary to stop the crash from unmounting the whole app.
+ * Also drops the live plan/taskStates: those belong to the previous
+ * in-browser run, not the session being reopened.
+ */
+function sanitizePendingMessage(message: DisplayMessage): DisplayMessage | null {
+  if (typeof message.content !== 'string') return null;
+  return { ...message, plan: undefined, taskStates: undefined };
+}
+
+function sanitizePending(pending: DisplayMessage[]): DisplayMessage[] {
+  const cleaned: DisplayMessage[] = [];
+  for (const message of pending) {
+    const sanitized = sanitizePendingMessage(message);
+    if (sanitized) cleaned.push(sanitized);
+  }
+  return cleaned;
 }
 
 function hydrateRuns(): void {
@@ -145,7 +149,7 @@ function hydrateRuns(): void {
       // rebuilt only by fresh SSE events from the next live turn.
       run.plan = [];
       run.taskStates = {};
-      run.pending = stripLivePlanFromPending(pending);
+      run.pending = sanitizePending(pending);
       run.streamingContent = '';
       run.streamingTools = [];
       run.statusMessage = null;
@@ -331,15 +335,55 @@ async function runStream(sessionId: string, content: string): Promise<void> {
           patch(sessionId, { plan: tasks });
         },
         onTaskStart: (task) => {
+          const previous = getRun(sessionId).taskStates[task.id];
           patch(sessionId, {
             taskStates: {
               ...getRun(sessionId).taskStates,
               [task.id]: {
+                // A retry re-enters this handler: the tools of the attempt
+                // that failed are kept, so the log reads as one continuous
+                // account of the task rather than restarting from nothing.
+                ...(previous ?? {}),
                 state: 'working',
                 agent: task.agent,
                 skill: task.skill,
                 goal: task.goal,
+                error: undefined,
               },
+            },
+          });
+        },
+        onTaskRetry: (event) => {
+          const current = getRun(sessionId).taskStates[event.id];
+          patch(sessionId, {
+            taskStates: {
+              ...getRun(sessionId).taskStates,
+              [event.id]: {
+                ...(current ?? { state: 'working' }),
+                state: 'working',
+                attempt: event.attempt,
+                attempts_allowed: event.of,
+              },
+            },
+          });
+        },
+        onReplan: (event) => {
+          // Repair tasks join the plan mid-run, so the diagram grows a branch
+          // instead of the new work appearing only in the final answer.
+          const run = getRun(sessionId);
+          const known = new Set(run.plan.map((task) => task.id));
+          const added = event.tasks.filter((task) => !known.has(task.id));
+          if (added.length === 0) return;
+          patch(sessionId, {
+            plan: [...run.plan, ...added],
+            taskStates: {
+              ...run.taskStates,
+              ...Object.fromEntries(
+                added.map((task) => [
+                  task.id,
+                  { state: 'pending' as const, skill: task.skill, goal: task.goal, repairs: task.repairs ?? undefined },
+                ]),
+              ),
             },
           });
         },
@@ -354,6 +398,8 @@ async function runStream(sessionId: string, content: string): Promise<void> {
                 artifact: task.artifact,
                 error: task.error,
                 elapsed_seconds: task.elapsed_seconds,
+                token_usage: task.token_usage,
+                budget_note: task.note,
               },
             },
           });
@@ -406,10 +452,13 @@ async function runStream(sessionId: string, content: string): Promise<void> {
         onDone: (data) => {
           const text = internal.streamText || data.response || '';
 
-          // A generation stopped before it produced anything leaves no
-          // message behind — appending an empty bubble (or worse, a stale
-          // fallback) would look like the agent answered.
-          if (data.cancelled && !text.trim()) {
+          // A turn that produced nothing leaves no message behind — appending
+          // an empty bubble (or worse, a stale fallback) would look like the
+          // agent answered. This covers a cancelled generation *and* a failed
+          // one: when the provider rejects the request, the `error` event
+          // carries the reason and the blank bubble only hid it, which read as
+          // the message never having been sent at all.
+          if (!text.trim()) {
             patch(sessionId, {
               streamingContent: '',
               streamingTools: [],

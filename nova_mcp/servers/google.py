@@ -22,6 +22,7 @@ from nova_mcp.servers._common import (
     ServiceError,
     bullet_list,
     call_api,
+    event_result,
     truncate,
 )
 
@@ -234,7 +235,10 @@ async def google_create_calendar_event(
     except ServiceError as exc:
         return str(exc)
 
-    return f"Event '{summary}' created: {event.get('htmlLink', '(no link)')}"
+    event = event or {}
+    return event_result(
+        "created", summary, event.get("id", ""), event.get("htmlLink", "")
+    )
 
 
 async def google_update_calendar_event(
@@ -283,7 +287,13 @@ async def google_update_calendar_event(
     except ServiceError as exc:
         return str(exc)
 
-    return f"Event updated: {event.get('htmlLink', event_id)}"
+    event = event or {}
+    return event_result(
+        "updated",
+        summary or event.get("summary", ""),
+        event.get("id", event_id),
+        event.get("htmlLink", ""),
+    )
 
 
 async def google_delete_calendar_event(event_id: str) -> str:

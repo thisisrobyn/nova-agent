@@ -556,12 +556,12 @@ function OrchestrationSection() {
             {
               icon: Users,
               title: 'Specialised workers',
-              desc: 'Research, calendar, documents and code agents, each with a narrow tool belt — and therefore a context window that fits.',
+              desc: 'Research, calendar, documents and advice agents, each with a narrow tool belt — and therefore a context window that fits.',
             },
             {
               icon: Layers,
-              title: 'Shared state',
-              desc: 'Memory, RAG, connections and artifacts stay in one checkpointed state, so handing a task between agents never loses the thread.',
+              title: 'Bounded by design',
+              desc: 'Every task runs under a budget of steps, tools and time. Out of budget answers with what it found, instead of searching forever.',
             },
           ].map(({ icon: Icon, title, desc }, i) => (
             <FadeInSection key={title} delay={0.1 + i * 0.06}>

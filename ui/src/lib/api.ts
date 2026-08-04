@@ -1,4 +1,4 @@
-import type { AuthorizeUrlResponse, ChatResponse, ConnectionListResponse, GitHubManifestResponse, DocumentDeleteResponse, DocumentInfo, DocumentListResponse, EpisodeListResponse, FactListResponse, HistoryResponse, MemoryClearResponse, OllamaCatalogModel, OllamaModel, OllamaStatus, ProviderTestResult, PullProgress, ScheduledTask, ScheduledTaskListResponse, SessionSummary, SettingsData, StreamEvent, TaskExecutionListResponse, ToolInfo } from './types';
+import type { AuthorizeUrlResponse, ChatResponse, ConnectionListResponse, GitHubManifestResponse, DocumentDeleteResponse, DocumentInfo, DocumentListResponse, EpisodeListResponse, FactListResponse, HistoryResponse, MemoryClearResponse, OllamaCatalogModel, OllamaModel, OllamaStatus, ProviderTestResult, PullProgress, ScheduledTask, ScheduledTaskListResponse, SessionSummary, SettingsData, StreamEvent, StreamReplanEvent, StreamTaskEndEvent, StreamTaskRetryEvent, SystemMetrics, TaskExecutionListResponse, ToolInfo } from './types';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -82,7 +82,9 @@ export async function sendMessageStream(
   callbacks: {
     onPlan?: (tasks: Array<{ id: string; skill: string; goal: string; depends_on: string[]; agent?: string | null }>) => void;
     onTaskStart?: (task: { id: string; agent: string; skill: string; goal: string }) => void;
-    onTaskEnd?: (task: { id: string; agent: string; state: 'completed' | 'failed'; artifact?: string; error?: string; elapsed_seconds?: number }) => void;
+    onTaskEnd?: (task: StreamTaskEndEvent) => void;
+    onTaskRetry?: (event: StreamTaskRetryEvent) => void;
+    onReplan?: (event: StreamReplanEvent) => void;
     onToken: (token: string) => void;
     onToolStart: (name: string, taskId?: string) => void;
     onToolEnd: (tool: { name: string; result: string }, taskId?: string) => void;
@@ -143,6 +145,12 @@ export async function sendMessageStream(
             break;
           case 'task_end':
             callbacks.onTaskEnd?.(event);
+            break;
+          case 'task_retry':
+            callbacks.onTaskRetry?.(event);
+            break;
+          case 'replan':
+            callbacks.onReplan?.(event);
             break;
           case 'tool_start':
             callbacks.onToolStart(event.name, event.task_id);
@@ -290,6 +298,15 @@ export async function pullOllamaModel(
       }
     }
   }
+}
+
+/* ── Host resource metrics ────────────────────────────────── */
+
+/** One CPU / RAM / GPU sample from the machine running the API. */
+export async function getSystemMetrics(signal?: AbortSignal): Promise<SystemMetrics> {
+  const res = await fetch(`${API_BASE}/api/v1/system/metrics`, { signal });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json() as Promise<SystemMetrics>;
 }
 
 /* ── Memory ───────────────────────────────────────────────── */
