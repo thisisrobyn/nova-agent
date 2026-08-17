@@ -10,7 +10,7 @@ Usage:
 
 Environment:
     GITHUB_TOKEN           Token with the ``read:project`` scope (required).
-    GITHUB_PROJECT_OWNER   Project owner login (default: thisisrober).
+    GITHUB_PROJECT_OWNER   Project owner login (default: thisisrobyn).
     GITHUB_PROJECT_NUMBER  Project number (default: 3).
 """
 

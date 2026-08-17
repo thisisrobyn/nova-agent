@@ -40,4 +40,4 @@ jobs:
           scp -o StrictHostKeyChecking=no ui/public/roadmap.json \
             $SERVER_USER@$SERVER_IP:/home/ubuntu/nova-agent-ui/roadmap.json
           scp -o StrictHostKeyChecking=no ui/public/roadmap.json \
-            $SERVER_USER@$SERVER_IP:/home/ubuntu/thisisrober/projects/nova-agent/roadmap.json
+            $SERVER_USER@$SERVER_IP:/home/ubuntu/robyn/projects/nova-agent/roadmap.json

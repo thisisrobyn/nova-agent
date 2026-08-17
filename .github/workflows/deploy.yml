@@ -66,7 +66,7 @@ jobs:
         run: |
           rsync -avz --delete \
             -e "ssh -o StrictHostKeyChecking=no" \
-            ui/dist/ $SERVER_USER@$SERVER_IP:/home/ubuntu/thisisrober/projects/nova-agent/
+            ui/dist/ $SERVER_USER@$SERVER_IP:/home/ubuntu/robyn/projects/nova-agent/
 
       - name: Deploy to subdomain location
         if: steps.check.outputs.skip == 'false'

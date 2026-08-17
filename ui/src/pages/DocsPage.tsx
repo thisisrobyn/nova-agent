@@ -162,7 +162,7 @@ const docs: DocSection[] = [
         <H2>Step-by-step Installation</H2>
 
         <H3>1. Clone the project</H3>
-        <CodeBlock lang="bash">{`git clone https://github.com/thisisrober/nova-agent.git
+        <CodeBlock lang="bash">{`git clone https://github.com/thisisrobyn/nova-agent.git
 cd nova-agent`}</CodeBlock>
 
         <H3>2. Pull Ollama models</H3>
@@ -1009,7 +1009,7 @@ def my_new_tool(query: str) -> str:
 
         <H3>Semantic Facts</H3>
         <P>
-          Key-value pairs extracted by the LLM from conversations. Examples: user_name=Roberto,
+          Key-value pairs extracted by the LLM from conversations. Examples: user_name=Robyn,
           preferred_language=Python. Each fact is stored with a confidence score and source session.
         </P>
 
@@ -1744,7 +1744,7 @@ export function DocsPage() {
             </div>
           </div>
           <a
-            href="https://github.com/thisisrober/nova-agent"
+            href="https://github.com/thisisrobyn/nova-agent"
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-lg p-2 text-surface-400 transition-colors hover:bg-surface-800 hover:text-surface-200"

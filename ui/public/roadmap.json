@@ -1,7 +1,7 @@
 {
   "project_title": "NOVA — Neural Orchestration & Virtual Agent",
   "project_description": "NOVA (Neural Orchestration & Virtual Agent) is an AI conversational agent built as a master's thesis project. It uses LangGraph for orchestration, Ollama for local LLM inference, FastAPI as backend, and React as frontend. It features autonomous code execution, web search, short/long-term memory with",
-  "project_url": "https://github.com/users/thisisrober/projects/3",
+  "project_url": "https://github.com/users/thisisrobyn/projects/3",
   "iterations": [
     {
       "id": "71c5d0c0",
@@ -13,7 +13,7 @@
         {
           "title": "Create professional first landing page for AI agent with chatbot color palettes and project board link",
           "number": 5,
-          "url": "https://github.com/thisisrober/nova-agent/issues/5",
+          "url": "https://github.com/thisisrobyn/nova-agent/issues/5",
           "state": "CLOSED",
           "status": "Done",
           "priority": "P0",
@@ -37,7 +37,7 @@
         {
           "title": "Add MCP integrations for external services",
           "number": 9,
-          "url": "https://github.com/thisisrober/nova-agent/issues/9",
+          "url": "https://github.com/thisisrobyn/nova-agent/issues/9",
           "state": "OPEN",
           "status": "In progress",
           "priority": "P0",
@@ -52,7 +52,7 @@
         {
           "title": "Introduce multi-agent orchestration architecture (A2A)",
           "number": 10,
-          "url": "https://github.com/thisisrober/nova-agent/issues/10",
+          "url": "https://github.com/thisisrobyn/nova-agent/issues/10",
           "state": "OPEN",
           "status": "Ready",
           "priority": "P0",
@@ -67,7 +67,7 @@
         {
           "title": "Add real-time voice interaction",
           "number": 11,
-          "url": "https://github.com/thisisrober/nova-agent/issues/11",
+          "url": "https://github.com/thisisrobyn/nova-agent/issues/11",
           "state": "OPEN",
           "status": "Ready",
           "priority": "P0",
