@@ -13,7 +13,7 @@ from typing import Optional
 
 @dataclass
 class MemoryFact:
-    """A key-value fact extracted from conversation (e.g. user_name=Roberto).
+    """A key-value fact extracted from conversation (e.g. user_name=Robyn).
 
     Upsert semantics on ``key``: if a fact with the same key exists,
     the value is overwritten.

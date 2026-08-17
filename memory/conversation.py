@@ -36,7 +36,7 @@ Only include facts you are confident about. If no facts can be extracted, return
 
 Example output:
 [
-  {{"key": "user_name", "value": "Roberto"}},
+  {{"key": "user_name", "value": "Robyn"}},
   {{"key": "preferred_language", "value": "Spanish"}},
   {{"key": "current_project", "value": "Data engineering pipeline"}}
 ]

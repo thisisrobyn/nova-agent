@@ -11,8 +11,8 @@ import {
   AnthropicIcon,
 } from '@/components/ui/BrandIcons';
 
-const GITHUB_REPO = 'https://github.com/thisisrober/nova-agent';
-const GITHUB_PROFILE = 'https://github.com/thisisrober';
+const GITHUB_REPO = 'https://github.com/thisisrobyn/nova-agent';
+const GITHUB_PROFILE = 'https://github.com/thisisrobyn';
 const IS_PROD = import.meta.env.PROD;
 
 import {
@@ -930,7 +930,7 @@ function RoadmapSection() {
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <p className="text-sm text-surface-400 mb-4">{error}</p>
                 <a
-                  href="https://github.com/users/thisisrober/projects/3/views/1"
+                  href="https://github.com/users/thisisrobyn/projects/3/views/1"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 text-sm text-primary-400 hover:underline"
@@ -1071,7 +1071,7 @@ export function LandingPage() {
               Docs
             </a>
             <a
-              href="https://github.com/users/thisisrober/projects/3/views/1"
+              href="https://github.com/users/thisisrobyn/projects/3/views/1"
               target="_blank"
               rel="noopener noreferrer"
               className="text-sm text-surface-300 transition-colors hover:text-primary-400"
@@ -1086,8 +1086,8 @@ export function LandingPage() {
               href={GITHUB_PROFILE}
               target="_blank"
               rel="noopener noreferrer"
-              title="thisisrober on GitHub"
-              aria-label="thisisrober on GitHub"
+              title="thisisrobyn on GitHub"
+              aria-label="thisisrobyn on GitHub"
               className="rounded-lg p-2 text-surface-400 transition-colors hover:bg-surface-800 hover:text-surface-200"
             >
               <Github className="h-5 w-5" />
@@ -1538,7 +1538,7 @@ export function LandingPage() {
 
       {/* ─── CTA Section ─── */}
       <section className="relative border-t border-surface-700/20 py-32">
-        <div className="pointer-events-none absolute inset-0">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="absolute bottom-0 left-1/2 h-[500px] w-[700px] -translate-x-1/2 rounded-full bg-primary-500/[0.05] blur-[120px]" />
         </div>
 
@@ -1576,7 +1576,7 @@ export function LandingPage() {
             </div>
             <div className="flex items-center gap-6">
               <a
-                href="https://github.com/thisisrober/nova-agent"
+                href="https://github.com/thisisrobyn/nova-agent"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sm text-surface-500 transition-colors hover:text-surface-300"
@@ -1590,7 +1590,7 @@ export function LandingPage() {
                 Documentation
               </button>
               <a
-                href="https://github.com/users/thisisrober/projects/3/views/1"
+                href="https://github.com/users/thisisrobyn/projects/3/views/1"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sm text-surface-500 transition-colors hover:text-surface-300"

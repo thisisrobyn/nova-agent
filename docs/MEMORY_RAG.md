@@ -10,7 +10,7 @@ NOVA uses two types of long-term memory, both stored in SQLite (`data/nova_memor
 
 Key-value pairs extracted by the LLM from conversations. Examples:
 
-- `user_name=Roberto`
+- `user_name=Robyn`
 - `preferred_language=Python`
 
 Each fact is stored with a confidence score and the source session ID.

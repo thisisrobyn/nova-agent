@@ -96,7 +96,7 @@ def get_roadmap_config() -> tuple[str, str, int]:
         Tuple of ``(token, owner, project_number)``.
     """
     token = os.getenv("GITHUB_TOKEN", "")
-    owner = os.getenv("GITHUB_PROJECT_OWNER", "thisisrober")
+    owner = os.getenv("GITHUB_PROJECT_OWNER", "thisisrobyn")
     number = int(os.getenv("GITHUB_PROJECT_NUMBER", "3"))
     return token, owner, number
 
