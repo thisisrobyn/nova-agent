@@ -8,7 +8,7 @@ An advanced conversational AI agent built with **LangGraph**, **FastAPI** and **
 
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Follow-0A66C2?style=for-the-badge&logo=linkedin)](https://www.linkedin.com/in/thisisrobyn)
 [![GitHub](https://img.shields.io/badge/GitHub-Follow-181717?style=for-the-badge&logo=github)](https://github.com/thisisrobyn)
-[![Stars](https://img.shields.io/github/stars/thisisrobyn/nova-agent?style=for-the-badge&color=f59e0b)](https://github.com/thisisrobyn/nova-agent/stargazers)
+[![Stars](https://img.shields.io/github/stars/nova-ai-sys/nova-agent?style=for-the-badge&color=f59e0b)](https://github.com/nova-ai-sys/nova-agent/stargazers)
 
 </div>
 
@@ -45,7 +45,7 @@ a cloud model.
 
 ```bash
 # 1. Clone the project
-git clone https://github.com/thisisrobyn/nova-agent/ && cd nova-agent
+git clone https://github.com/nova-ai-sys/nova-agent/ && cd nova-agent
 
 # 2. Create your config file (the defaults work as-is for local use)
 cp .env.example .env

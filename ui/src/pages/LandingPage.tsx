@@ -11,7 +11,7 @@ import {
   AnthropicIcon,
 } from '@/components/ui/BrandIcons';
 
-const GITHUB_REPO = 'https://github.com/thisisrobyn/nova-agent';
+const GITHUB_REPO = 'https://github.com/nova-ai-sys/nova-agent';
 const GITHUB_PROFILE = 'https://github.com/thisisrobyn';
 const IS_PROD = import.meta.env.PROD;
 
@@ -1466,7 +1466,7 @@ export function LandingPage() {
             </div>
             <div className="flex items-center gap-6">
               <a
-                href="https://github.com/thisisrobyn/nova-agent"
+                href="https://github.com/nova-ai-sys/nova-agent"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sm text-surface-500 transition-colors hover:text-surface-300"

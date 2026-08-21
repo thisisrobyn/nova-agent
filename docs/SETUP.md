@@ -15,7 +15,7 @@
 ### 1. Clone the project
 
 ```bash
-git clone https://github.com/thisisrobyn/nova-agent.git
+git clone https://github.com/nova-ai-sys/nova-agent.git
 cd nova-agent
 ```
 

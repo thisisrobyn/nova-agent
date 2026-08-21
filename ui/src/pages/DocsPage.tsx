@@ -162,7 +162,7 @@ const docs: DocSection[] = [
         <H2>Step-by-step Installation</H2>
 
         <H3>1. Clone the project</H3>
-        <CodeBlock lang="bash">{`git clone https://github.com/thisisrobyn/nova-agent.git
+        <CodeBlock lang="bash">{`git clone https://github.com/nova-ai-sys/nova-agent.git
 cd nova-agent`}</CodeBlock>
 
         <H3>2. Pull Ollama models</H3>
@@ -1744,7 +1744,7 @@ export function DocsPage() {
             </div>
           </div>
           <a
-            href="https://github.com/thisisrobyn/nova-agent"
+            href="https://github.com/nova-ai-sys/nova-agent"
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-lg p-2 text-surface-400 transition-colors hover:bg-surface-800 hover:text-surface-200"

@@ -137,6 +137,6 @@ live: which agent is working, which tool it is calling, what each one cost.
 
 ### Where do I report a bug or follow development?
 
-The [GitHub repository](https://github.com/thisisrobyn/nova-agent) and its
+The [GitHub repository](https://github.com/nova-ai-sys/nova-agent) and its
 public project board. Releases are automated with release-please, so the
 changelog always reflects what shipped.
