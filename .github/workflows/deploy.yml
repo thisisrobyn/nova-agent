@@ -10,6 +10,7 @@ permissions:
 env:
   SERVER_IP: ${{ secrets.SERVER_IP }}
   SERVER_USER: ubuntu
+  SUBDOMAIN_DIR: /home/ubuntu/nova-agent-ui
 
 jobs:
   deploy:
@@ -61,28 +62,21 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H $SERVER_IP >> ~/.ssh/known_hosts
 
-      - name: Deploy to portfolio (projects/nova-agent)
+      - name: Deploy to nova subdomain
         if: steps.check.outputs.skip == 'false'
         run: |
+          ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "mkdir -p $SUBDOMAIN_DIR"
           rsync -avz --delete \
             -e "ssh -o StrictHostKeyChecking=no" \
-            ui/dist/ $SERVER_USER@$SERVER_IP:/home/ubuntu/robyn/projects/nova-agent/
-
-      - name: Deploy to subdomain location
-        if: steps.check.outputs.skip == 'false'
-        run: |
-          ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "mkdir -p /home/ubuntu/nova-agent-ui"
-          rsync -avz --delete \
-            -e "ssh -o StrictHostKeyChecking=no" \
-            ui/dist/ $SERVER_USER@$SERVER_IP:/home/ubuntu/nova-agent-ui/
+            ui/dist/ $SERVER_USER@$SERVER_IP:$SUBDOMAIN_DIR/
 
       - name: Health check
         if: steps.check.outputs.skip == 'false'
         run: |
           sleep 3
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVER_IP/projects/nova-agent/ || echo "000")
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://nova.robyn.es/ || echo "000")
           if [ "$STATUS" = "200" ]; then
-            echo "✅ /projects/nova-agent/ is live (HTTP $STATUS)"
+            echo "✅ nova.robyn.es is live (HTTP $STATUS)"
           else
-            echo "⚠️  /projects/nova-agent/ returned HTTP $STATUS"
+            echo "⚠️  nova.robyn.es returned HTTP $STATUS"
           fi

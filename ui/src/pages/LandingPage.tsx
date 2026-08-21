@@ -105,120 +105,6 @@ function GridBackground() {
   );
 }
 
-/* ─── Animated Terminal Component ─── */
-function AnimatedTerminal() {
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 1, delay: 0.5 }}
-      className="relative mx-auto mt-16 w-full max-w-2xl"
-    >
-      <div className="overflow-hidden rounded-xl border border-surface-700/50 bg-surface-900/80 shadow-2xl shadow-primary-500/5 backdrop-blur-sm">
-        {/* Terminal header */}
-        <div className="flex items-center gap-2 border-b border-surface-700/50 px-4 py-3">
-          <div className="h-3 w-3 rounded-full bg-red-500/70" />
-          <div className="h-3 w-3 rounded-full bg-yellow-500/70" />
-          <div className="h-3 w-3 rounded-full bg-green-500/70" />
-          <span className="ml-2 text-xs text-surface-400">nova-agent</span>
-        </div>
-
-        {/* Terminal body */}
-        <div className="p-5 text-sm leading-relaxed">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 1.0 }}
-          >
-            <span className="text-primary-400">$</span>{' '}
-            <span className="text-surface-200">uv run nova</span>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 1.5 }}
-            className="mt-3"
-          >
-            <span className="text-primary-500">NOVA</span>{' '}
-            <span className="text-surface-300">v1.0 — Neural Orchestration & Virtual Agent</span>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 2.0 }}
-            className="mt-1 text-surface-400"
-          >
-            Model: gemma3:4b | Tools: 30 loaded | Google, GitHub connected
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 2.5 }}
-            className="mt-4"
-          >
-            <span className="text-primary-400">{'>'}</span>{' '}
-            <span className="text-surface-200">Any unread mail about the release? Open an issue if so</span>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 3.0 }}
-            className="mt-2 text-surface-300"
-          >
-            <span className="text-yellow-400/80">[google_list_emails]</span> query=is:unread release
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 3.3 }}
-            className="mt-1 text-surface-300"
-          >
-            <span className="text-yellow-400/80">[github_create_issue]</span> repo=nova-agent
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 3.6 }}
-            className="mt-1 text-surface-300"
-          >
-            One unread thread from Ana. Opened{' '}
-            <span className="text-primary-300">issue #42</span> with her checklist.
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 4.0 }}
-            className="mt-3 text-surface-500 text-xs"
-          >
-            Tokens: prompt=128 | completion=42 | total=170
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 4.2 }}
-            className="mt-3 flex items-center gap-1"
-          >
-            <span className="text-primary-400">{'>'}</span>{' '}
-            <motion.span
-              className="inline-block h-4 w-2 bg-primary-400"
-              animate={{ opacity: [1, 0] }}
-              transition={{ duration: 0.8, repeat: Infinity }}
-            />
-          </motion.div>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
 /* ─── NOVA acronym (easter egg) ───
    Hovering — or tapping, on touch — the wordmark spells the name out. The `O`
    is the one that is about to grow: orchestration is the next milestone, so it
@@ -406,10 +292,6 @@ function ConnectedServicesSection() {
     <section id="connections" className="relative border-t border-surface-700/20 py-32">
       <div className="mx-auto max-w-6xl px-6">
         <FadeInSection className="text-center">
-          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-surface-600/40 bg-surface-900/50 px-3 py-1">
-            <Check className="h-3.5 w-3.5 text-surface-400" />
-            <span className="text-xs font-medium text-surface-300">Shipped in v0.6</span>
-          </div>
           <h2 className="text-3xl font-bold text-surface-100 sm:text-4xl">
             Connect your <span className="text-primary-400">own accounts</span>
           </h2>
@@ -1103,7 +985,7 @@ export function LandingPage() {
       </nav>
 
       {/* ─── Hero Section ─── */}
-      <section ref={heroRef} className="relative flex min-h-screen flex-col items-center justify-center px-6 pt-20">
+      <section ref={heroRef} className="relative flex min-h-screen flex-col items-center justify-center px-6 py-24">
         <GridBackground />
 
         <div className="relative z-10 mx-auto max-w-4xl text-center">
@@ -1115,9 +997,7 @@ export function LandingPage() {
             className="mb-8 inline-flex max-w-full flex-wrap items-center justify-center gap-2 rounded-full border border-primary-700/30 bg-primary-900/20 px-4 py-1.5"
           >
             <div className="h-2 w-2 rounded-full bg-primary-400 animate-pulse" />
-            <span className="text-xs text-primary-300">
-              Open Source AI Agent — local by default, cloud when you want it
-            </span>
+            <span className="text-xs text-primary-300">Open Source AI Agent</span>
             <span className="flex items-center gap-1.5 border-l border-primary-700/30 pl-2 text-primary-300/70">
               <OllamaIcon className="h-3.5 w-3.5" />
               <OpenAIIcon className="h-3.5 w-3.5" />
@@ -1171,9 +1051,6 @@ export function LandingPage() {
             </button>
           </motion.div>
         </div>
-
-        {/* Animated terminal */}
-        <AnimatedTerminal />
 
         {/* Scroll indicator */}
         <motion.div
@@ -1274,6 +1151,57 @@ export function LandingPage() {
         </div>
       </section>
 
+      {/* ─── Privacy Section ─── */}
+      <section className="relative border-t border-surface-700/20 py-32">
+        <div className="mx-auto max-w-6xl px-6">
+          <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
+            <FadeInSection>
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-500/10">
+                <Shield className="h-7 w-7 text-primary-400" />
+              </div>
+              <h2 className="mt-6 text-3xl font-bold text-surface-100 sm:text-4xl">
+                Local by default.{' '}
+                <span className="text-primary-400">Private by design.</span>
+              </h2>
+              <p className="mt-4 leading-relaxed text-surface-400">
+                Out of the box NOVA runs entirely on your machine through Ollama: conversations,
+                documents and memory never leave your hardware, and there is no telemetry. Cloud
+                models and connected accounts are opt-in — nothing reaches a third party until
+                you pick one, and the OAuth tokens that make it possible stay encrypted on your
+                own disk.
+              </p>
+            </FadeInSection>
+
+            <FadeInSection delay={0.15}>
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  { label: 'Your Model', desc: 'Local Ollama, or OpenAI / Anthropic' },
+                  { label: 'Local Storage', desc: 'SQLite + ChromaDB on disk' },
+                  { label: 'No Cloud by Default', desc: 'Zero external API calls*' },
+                  { label: 'Open Source', desc: 'Fully auditable codebase' },
+                  { label: 'Encrypted Tokens', desc: 'Fernet at rest, secrets server-side' },
+                  { label: 'Revocable', desc: 'Disconnect any account at any time' },
+                ].map(({ label, desc }) => (
+                  <div
+                    key={label}
+                    className="rounded-xl border border-surface-700/30 bg-surface-900/40 p-5 backdrop-blur-sm"
+                  >
+                    <div className="font-semibold text-surface-100">{label}</div>
+                    <div className="mt-1 text-xs text-surface-400">{desc}</div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-4 text-xs text-surface-500">
+                * Except what you switch on yourself: a cloud model provider, web search
+                (Tavily/DDG), external MCP servers, and the Google,
+                Microsoft or GitHub accounts you choose to connect — those calls go to the
+                provider you signed into, and nowhere else.
+              </p>
+            </FadeInSection>
+          </div>
+        </div>
+      </section>
+
       {/* ─── Multi-agent orchestration (A2A) — the headline of this release ─── */}
       <OrchestrationSection />
 
@@ -1291,10 +1219,11 @@ export function LandingPage() {
                   <span className="text-primary-400">modern stack</span>
                 </h2>
                 <p className="mt-4 leading-relaxed text-surface-400">
-                  Three clean layers — a React frontend, a FastAPI backend, and a LangGraph
-                  agent engine — connected by SSE streaming for real-time responses. The model
-                  behind it is swappable: a local Ollama model out of the box, or OpenAI or
-                  Anthropic selected from the settings panel, without touching the graph.
+                  Four clean layers — a React frontend, a FastAPI backend, a LangGraph agent
+                  engine, and the A2A orchestration layer on top of it — connected by SSE
+                  streaming for real-time responses. The model behind it is swappable: a local
+                  Ollama model out of the box, or OpenAI or Anthropic selected from the settings
+                  panel, without touching the graph.
                 </p>
               </FadeInSection>
 
@@ -1320,15 +1249,27 @@ export function LandingPage() {
                   color="#c084fc"
                   delay={0.3}
                 />
+                <ArchLayer
+                  icon={Network}
+                  label="Orchestration"
+                  tech="A2A supervisor + specialised workers, budgeted per task"
+                  color="#f472b6"
+                  delay={0.4}
+                />
               </div>
             </div>
 
             {/* Flow diagram */}
             <FadeInSection delay={0.2}>
               <div className="rounded-xl border border-surface-700/30 bg-surface-900/50 p-6 backdrop-blur-sm">
-                <div className="mb-4 text-xs font-medium text-surface-400 uppercase tracking-widest">
-                  ReAct Loop
+                <div className="mb-1 text-xs font-medium text-surface-400 uppercase tracking-widest">
+                  Single-agent ReAct loop
                 </div>
+                <p className="mb-4 text-xs leading-relaxed text-surface-500">
+                  What one agent does with a request it can handle alone. A request that spans
+                  several domains goes to the A2A supervisor instead, which runs this same loop
+                  inside each worker.
+                </p>
                 <div className="space-y-3 text-sm">
                   {[
                     { step: '01', label: 'User sends message', color: 'text-primary-400' },
@@ -1395,57 +1336,6 @@ export function LandingPage() {
                   </div>
                 ))}
               </div>
-            </FadeInSection>
-          </div>
-        </div>
-      </section>
-
-      {/* ─── Privacy Section ─── */}
-      <section className="relative border-t border-surface-700/20 py-32">
-        <div className="mx-auto max-w-6xl px-6">
-          <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
-            <FadeInSection>
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-500/10">
-                <Shield className="h-7 w-7 text-primary-400" />
-              </div>
-              <h2 className="mt-6 text-3xl font-bold text-surface-100 sm:text-4xl">
-                Local by default.{' '}
-                <span className="text-primary-400">Private by design.</span>
-              </h2>
-              <p className="mt-4 leading-relaxed text-surface-400">
-                Out of the box NOVA runs entirely on your machine through Ollama: conversations,
-                documents and memory never leave your hardware, and there is no telemetry. Cloud
-                models and connected accounts are opt-in — nothing reaches a third party until
-                you pick one, and the OAuth tokens that make it possible stay encrypted on your
-                own disk.
-              </p>
-            </FadeInSection>
-
-            <FadeInSection delay={0.15}>
-              <div className="grid grid-cols-2 gap-4">
-                {[
-                  { label: 'Your Model', desc: 'Local Ollama, or OpenAI / Anthropic' },
-                  { label: 'Local Storage', desc: 'SQLite + ChromaDB on disk' },
-                  { label: 'No Cloud by Default', desc: 'Zero external API calls*' },
-                  { label: 'Open Source', desc: 'Fully auditable codebase' },
-                  { label: 'Encrypted Tokens', desc: 'Fernet at rest, secrets server-side' },
-                  { label: 'Revocable', desc: 'Disconnect any account at any time' },
-                ].map(({ label, desc }) => (
-                  <div
-                    key={label}
-                    className="rounded-xl border border-surface-700/30 bg-surface-900/40 p-5 backdrop-blur-sm"
-                  >
-                    <div className="font-semibold text-surface-100">{label}</div>
-                    <div className="mt-1 text-xs text-surface-400">{desc}</div>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-4 text-xs text-surface-500">
-                * Except what you switch on yourself: a cloud model provider, web search
-                (Tavily/DDG), external MCP servers, and the Google,
-                Microsoft or GitHub accounts you choose to connect — those calls go to the
-                provider you signed into, and nowhere else.
-              </p>
             </FadeInSection>
           </div>
         </div>
